@@ -1,0 +1,407 @@
+#include <windows.h>
+#include <windowsx.h>
+#include <winnt.h>
+#include <ddk/ntifs.h>
+#include <ddk/winddk.h>
+#include <ntdef.h>
+#include <psapi.h>
+#include <wchar.h>
+
+#define EXTATTR_NAMESPACE_USER 0
+#define EXTATTR_NAMESPACE_SYSTEM 1
+
+/*
+ * ADS は普通のファイルのように扱えるから、extattr とみなして扱う場合は容量の制限を設けることにする。
+ * ruby-extattr で不十分な巨大なデータを扱う場合は File.open で開くことが出来るので必要であればそちらで。
+ * TODO: 最適値を探すべき
+ */
+static const size_t EXTATTR_MAX = 131072;
+
+/*
+ * TODO: バッファサイズの確保量が結構大きめ。最適化をするべき。
+ * TODO: CloseHandle してないところがありすぎ。修正。
+ * TODO: Win9X シリーズだとこのライブラリ読み込みすら出来ない。
+ *       メソッド定義だけは行うようにするべき? (実際に呼び出したら NotImpError 例外を投げる)
+ * リパースポイントって、ADSはつけられないのかな? 操作方法がわからない。
+ */
+
+
+static rb_encoding *ENCutf8p;
+static VALUE ENCutf8;
+static rb_encoding *ENCutf16lep;
+static VALUE ENCutf16le;
+
+
+
+
+static VALUE
+str2wcs(VALUE str)
+{
+    str = rb_str_encode(str, ENCutf16le, 0, Qnil);
+    rb_str_buf_cat(str, "\0", 1);
+    return str;
+}
+
+static VALUE
+str2wpath(VALUE str)
+{
+    str = str2wcs(str);
+    wchar_t *p = (wchar_t *)RSTRING_PTR(str);
+    const wchar_t *end = p + RSTRING_LEN(str) / 2;
+    for (; p < end; p ++) {
+        if (*p == L'/') { *p = L'\\'; }
+    }
+    return str;
+}
+
+#define STR2WPATH(str)                      \
+    ({                                      \
+        (str) = str2wpath(str);             \
+        (const wchar_t *)RSTRING_PTR(str);  \
+    })                                      \
+
+
+static VALUE
+wcs2str(const wchar_t str[], size_t size)
+{
+    if (!str) { return Qnil; }
+    VALUE v = rb_str_new((const char *)str, size * sizeof(str[0]));
+    rb_enc_associate(v, ENCutf16lep);
+
+    return rb_str_encode(v, ENCutf8, ECONV_INVALID_REPLACE | ECONV_UNDEF_REPLACE, Qnil);
+}
+
+static VALUE
+wpath2str(const wchar_t path[], size_t size)
+{
+    VALUE v = wcs2str(path, size);
+    if (NIL_P(v)) { return Qnil; }
+    char *p = RSTRING_PTR(v);
+    const char *end = p + RSTRING_LEN(v);
+    for (; p < end; p ++) {
+        if (*p == '\\') { *p = '/'; }
+    }
+    return v;
+}
+
+/*
+ * ADS 名の先端のコロン『:』と、終端の『:$DATA』を除去してrbuyの文字列を返す。
+ */
+static VALUE
+adsname2str(const wchar_t name[], size_t size)
+{
+    if (name[0] == L':' && wcsncmp(name + size - 6, L":$DATA", 6) == 0) {
+        name += 1;
+        size -= 7;
+    }
+
+    return wpath2str(name, size);
+}
+
+
+static void
+raise_win32_error(DWORD status)
+{
+    rb_raise(rb_eSystemCallError, "Win32 API error - %u (%08Xh)", status, status);
+}
+
+static void
+raise_ntstatus_error(NTSTATUS status)
+{
+    rb_raise(rb_eSystemCallError, "NTSTATUS error - %u (%08Xh)", status, status);
+}
+
+static VALUE
+get_filepath(HANDLE file)
+{
+    DWORD size = 65536;
+    VALUE buf = rb_str_buf_new(size);
+    NTSTATUS status = NtQueryObject(file, 
+                                    ObjectNameInformation,
+                                    RSTRING_PTR(buf),
+                                    size,
+                                    &size);
+    if (status != 0) { raise_ntstatus_error(status); }
+    const OBJECT_NAME_INFORMATION *info = (const OBJECT_NAME_INFORMATION *)RSTRING_PTR(buf);
+    if (wcsnicmp(info->Name.Buffer, L"\\Device\\", 8) == 0) {
+        // 先頭の "/Device/" を "//?/" に置き換える
+        wcsncpy(info->Name.Buffer + 4, L"\\\\?\\", 4);
+        return wpath2str(info->Name.Buffer + 4, info->Name.Length / 2 - 4);
+    } else {
+        return wpath2str(info->Name.Buffer, info->Name.Length / 2);
+    }
+}
+
+static uint64_t
+get_filesize(HANDLE file)
+{
+    BY_HANDLE_FILE_INFORMATION info;
+
+    if (!GetFileInformationByHandle(file, &info)) {
+        raise_win32_error(GetLastError());
+    }
+
+    return ((uint64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow;
+}
+
+static VALUE
+file_close(HANDLE file)
+{
+    /*
+     * rb_ensure から直接呼びたかったけど、呼び出し規約が違うから無理だよね。
+     */
+    CloseHandle(file);
+}
+
+static void
+check_namespace(int namespace)
+{
+    if (namespace != EXTATTR_NAMESPACE_USER) {
+        errno = EPERM;
+        rb_sys_fail(NULL);
+    }
+}
+
+
+static VALUE
+extattr_list0(HANDLE file)
+{
+    VALUE iostatusblock = rb_str_buf_new(4096);
+    VALUE infobuf = rb_str_buf_new(65536);
+    rb_str_set_len(infobuf, 65536);
+    NTSTATUS status = NtQueryInformationFile(file,
+                                             (PIO_STATUS_BLOCK)RSTRING_PTR(iostatusblock),
+                                             RSTRING_PTR(infobuf), RSTRING_LEN(infobuf),
+                                             FileStreamInformation);
+    if (status != 0) { raise_ntstatus_error(status); }
+    const char *ptr = RSTRING_PTR(infobuf);
+    VALUE list = Qnil;
+    if (!rb_block_given_p()) { list = rb_ary_new(); }
+    for (;;) {
+        const FILE_STREAM_INFORMATION *info = (const FILE_STREAM_INFORMATION *)ptr;
+        VALUE name = adsname2str(info->StreamName, info->StreamNameLength / 2);
+        if (RSTRING_LEN(name) > 0) {
+            if (NIL_P(list)) {
+                rb_yield(name);
+            } else {
+                rb_ary_push(list, name);
+            }
+        }
+        size_t size = info->NextEntryOffset;
+        if (size == 0) { break; }
+        ptr += size;
+    }
+    return list;
+}
+
+static VALUE
+extattr_size0(HANDLE file)
+{
+    return ULL2NUM(get_filesize(file));
+}
+
+
+static VALUE
+file_extattr_list0(VALUE file, int fd, int namespace)
+{
+    check_namespace(namespace);
+    HANDLE file1 = (HANDLE)_get_osfhandle(fd);
+    return extattr_list0(file1);
+}
+
+static VALUE
+file_extattr_size0(VALUE file, int fd, int namespace, VALUE name)
+{
+    return file_s_extattr_size0(get_filepath((HANDLE)_get_osfhandle(fd)),
+                                namespace, name);
+}
+
+static VALUE
+file_extattr_get0(VALUE file, int fd, int namespace, VALUE name)
+{
+    return file_s_extattr_get0(get_filepath((HANDLE)_get_osfhandle(fd)),
+                               namespace, name);
+}
+
+static VALUE
+file_extattr_set0(VALUE file, int fd, int namespace, VALUE name, VALUE data)
+{
+    return file_s_extattr_set0(get_filepath((HANDLE)_get_osfhandle(fd)),
+                               namespace, name, data);
+}
+
+static VALUE
+file_extattr_delete0(VALUE file, int fd, int namespace, VALUE name)
+{
+    return file_s_extattr_delete0(get_filepath((HANDLE)_get_osfhandle(fd)),
+                                  namespace, name);
+}
+
+
+static VALUE
+file_s_extattr_list0(VALUE path, int namespace)
+{
+    check_namespace(namespace);
+    HANDLE file = CreateFileW(STR2WPATH(path), 0,
+                              FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              NULL, 3,
+                              FILE_FLAG_BACKUP_SEMANTICS,
+                              0);
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    return rb_ensure(extattr_list0, (VALUE)file, file_close, (VALUE)file);
+}
+
+static VALUE
+file_s_extattr_list_link0(VALUE path, int namespace)
+{
+    check_namespace(namespace);
+    HANDLE file = CreateFileW(STR2WPATH(path), 0,
+                              FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              NULL, 3,
+                              FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                              0);
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    return rb_ensure(extattr_list0, (VALUE)file, file_close, (VALUE)file);
+}
+
+static VALUE
+file_s_extattr_size0(VALUE path, int namespace, VALUE name)
+{
+    check_namespace(namespace);
+    path = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path, name);
+    HANDLE file = CreateFileW(STR2WPATH(path), 0,
+                              FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              NULL, 3,
+                              FILE_FLAG_BACKUP_SEMANTICS,
+                              0);
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    return rb_ensure(extattr_size0, (VALUE)file, file_close, (VALUE)file);
+}
+
+static VALUE
+file_s_extattr_size_link0(VALUE path, int namespace, VALUE name)
+{
+    check_namespace(namespace);
+    path = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path, name);
+    HANDLE file = CreateFileW(STR2WPATH(path), 0,
+                              FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              NULL, 3,
+                              FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                              0);
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    return rb_ensure(extattr_size0, (VALUE)file, file_close, (VALUE)file);
+}
+
+
+static VALUE
+extattr_get0(VALUE args[3])
+{
+    HANDLE file = (HANDLE)args[0];
+    int namespace = (int)args[1];
+    VALUE name = args[2];
+    uint64_t size = get_filesize(file);
+    if (size > EXTATTR_MAX) { rb_raise(rb_eSystemCallError, "extattr too huge"); }
+    VALUE buf = rb_str_buf_new(size);
+    DWORD readsize = 0;
+    if (!ReadFile(file, RSTRING_PTR(buf), size, &readsize, NULL)) {
+        raise_win32_error(GetLastError());
+    }
+    rb_str_set_len(buf, readsize);
+    return buf;
+}
+
+static VALUE
+extattr_get1(VALUE path, int flags, int namespace, VALUE name)
+{
+    check_namespace(namespace);
+    path = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path, name);
+    HANDLE file = CreateFileW(STR2WPATH(path), GENERIC_READ,
+                              FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              NULL, 3,
+                              FILE_FLAG_BACKUP_SEMANTICS | flags,
+                              0);
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    VALUE args[] = { (VALUE)file, (VALUE)namespace, name, };
+    return rb_ensure(extattr_get0, (VALUE)args, file_close, (VALUE)file);
+}
+
+static VALUE
+file_s_extattr_get0(VALUE path, int namespace, VALUE name)
+{
+    return extattr_get1(path, 0, namespace, name);
+}
+
+static VALUE
+file_s_extattr_get_link0(VALUE path, int namespace, VALUE name)
+{
+    return extattr_get1(path, FILE_FLAG_OPEN_REPARSE_POINT, namespace, name);
+}
+
+static VALUE
+extattr_set0(VALUE args[])
+{
+    HANDLE file = (HANDLE)args[0];
+    int namespace = (int)args[1];
+    VALUE name = (VALUE)args[2];
+    VALUE data = (VALUE)args[3];
+    uint64_t size = RSTRING_LEN(data);
+    if (size > EXTATTR_MAX) { rb_raise(rb_eSystemCallError, "extattr too huge"); }
+    DWORD wrotesize = size;
+    if (!WriteFile(file, RSTRING_PTR(data), size, &wrotesize, NULL)) {
+        raise_win32_error(GetLastError());
+    }
+    return Qnil;
+}
+
+static VALUE
+file_s_extattr_set0(VALUE path, int namespace, VALUE name, VALUE data)
+{
+    check_namespace(namespace);
+    path = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path, name);
+    HANDLE file = CreateFileW(STR2WPATH(path), GENERIC_WRITE,
+                              FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              NULL, CREATE_ALWAYS,
+                              FILE_FLAG_BACKUP_SEMANTICS,
+                              0);
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    VALUE args[] = { (VALUE)file, (VALUE)namespace, name, data };
+    return rb_ensure(extattr_set0, (VALUE)args, file_close, (VALUE)file);
+}
+
+static VALUE
+file_s_extattr_set_link0(VALUE path, int namespace, VALUE name, VALUE data)
+{
+    return file_s_extattr_set0(path, namespace, name, data);
+}
+
+static VALUE
+file_s_extattr_delete0(VALUE path, int namespace, VALUE name)
+{
+    check_namespace(namespace);
+    path = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path, name);
+    DeleteFileW(STR2WPATH(path));
+    return Qnil;
+}
+
+static VALUE
+file_s_extattr_delete_link0(VALUE path, int namespace, VALUE name)
+{
+    return file_s_extattr_delete0(path, namespace, name);
+}
+
+static void
+setup(void)
+{
+    ENCutf8p = rb_enc_find("UTF-8");
+    ENCutf8 = rb_enc_from_encoding(ENCutf8p);
+    rb_gc_register_address(&ENCutf8);
+
+    ENCutf16lep = rb_enc_find("UTF-16LE");
+    ENCutf16le = rb_enc_from_encoding(ENCutf16lep);
+    rb_gc_register_address(&ENCutf16le);
+}
