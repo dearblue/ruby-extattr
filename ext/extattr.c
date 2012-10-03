@@ -61,10 +61,10 @@ file2fd(VALUE file)
 
 #if defined(HAVE_SYS_EXTATTR_H)
 #   include "extattr.bsd"
-#elif defined(HAVE_ATTR_XATTR_H)
-#   include "extattr.linux"
 #elif defined(HAVE_WINNT_H)
 #   include "extattr.windows"
+#elif defined(HAVE_ATTR_XATTR_H) || defined(HAVE_SYS_XATTR_H)
+#   include "extattr.linux"
 #else
 #   error ruby extattr not supported on your system
 #endif

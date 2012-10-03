@@ -1,7 +1,7 @@
 
 Gem::Specification.new do |spec|
     spec.name = "extattr"
-    spec.version = "0.1"
+    spec.version = "0.1.1"
     spec.summary = "extended attribute operation library for ruby"
     spec.license = "2-clause BSD License"
     spec.author = "dearblue"

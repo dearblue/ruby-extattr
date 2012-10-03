@@ -6,32 +6,33 @@
 #include <ntdef.h>
 #include <psapi.h>
 #include <wchar.h>
+#include <ruby/win32.h>
 
 #define EXTATTR_NAMESPACE_USER 0
 #define EXTATTR_NAMESPACE_SYSTEM 1
 
 /*
- * ADS は普通のファイルのように扱えるから、extattr とみなして扱う場合は容量の制限を設けることにする。
- * ruby-extattr で不十分な巨大なデータを扱う場合は File.open で開くことが出来るので必要であればそちらで。
- * TODO: 最適値を探すべき
+ * - TODO: バッファサイズの確保量が結構大きめ。最適化をするべき。
+ * - TODO: CloseHandle してないところがありすぎ。修正。
+ * - TODO: Win9X シリーズだとこのライブラリ読み込みすら出来ない。
+ *   メソッド定義だけは行うようにするべき? (実際に呼び出したら NotImplementedError 例外を投げる、とか)
+ * - リパースポイントって、ADSはつけられないのかな? 操作方法がわからない。
  */
-static const size_t EXTATTR_MAX = 131072;
 
 /*
- * TODO: バッファサイズの確保量が結構大きめ。最適化をするべき。
- * TODO: CloseHandle してないところがありすぎ。修正。
- * TODO: Win9X シリーズだとこのライブラリ読み込みすら出来ない。
- *       メソッド定義だけは行うようにするべき? (実際に呼び出したら NotImpError 例外を投げる)
- * リパースポイントって、ADSはつけられないのかな? 操作方法がわからない。
+ * ADS は普通のファイルのように扱えるから、extattr とみなして扱う場合は容量の制限を設けることにする。
+ *
+ * ruby-extattr で不十分な巨大なデータを扱う場合は File.open で開くことが出来るので必要であればそちらで。
+ *
+ * TODO: 最適値を探すべき
  */
+static const size_t EXTATTR_MAX = 65536;
 
 
 static rb_encoding *ENCutf8p;
 static VALUE ENCutf8;
 static rb_encoding *ENCutf16lep;
 static VALUE ENCutf16le;
-
-
 
 
 static VALUE
@@ -90,7 +91,7 @@ wpath2str(const wchar_t path[], size_t size)
 static VALUE
 adsname2str(const wchar_t name[], size_t size)
 {
-    if (name[0] == L':' && wcsncmp(name + size - 6, L":$DATA", 6) == 0) {
+    if (name[0] == L':' && size >= 7 && wcsncmp(name + size - 6, L":$DATA", 6) == 0) {
         name += 1;
         size -= 7;
     }
@@ -100,9 +101,15 @@ adsname2str(const wchar_t name[], size_t size)
 
 
 static void
-raise_win32_error(DWORD status)
+raise_win32_error(DWORD status, VALUE name)
 {
-    rb_raise(rb_eSystemCallError, "Win32 API error - %u (%08Xh)", status, status);
+    if (NIL_P(name)) {
+        VALUE args[] = { INT2NUM(rb_w32_map_errno(status)), };
+        rb_exc_raise(rb_class_new_instance(1, args, rb_eSystemCallError));
+    } else {
+        VALUE args[] = { StringValue(name), INT2NUM(rb_w32_map_errno(status)), };
+        rb_exc_raise(rb_class_new_instance(2, args, rb_eSystemCallError));
+    }
 }
 
 static void
@@ -110,6 +117,15 @@ raise_ntstatus_error(NTSTATUS status)
 {
     rb_raise(rb_eSystemCallError, "NTSTATUS error - %u (%08Xh)", status, status);
 }
+
+static void
+check_status_error(NTSTATUS status)
+{
+    if (status != STATUS_SUCCESS) {
+        raise_ntstatus_error(status);
+    }
+}
+
 
 static VALUE
 get_filepath(HANDLE file)
@@ -121,7 +137,8 @@ get_filepath(HANDLE file)
                                     RSTRING_PTR(buf),
                                     size,
                                     &size);
-    if (status != 0) { raise_ntstatus_error(status); }
+    check_status_error(status);
+
     const OBJECT_NAME_INFORMATION *info = (const OBJECT_NAME_INFORMATION *)RSTRING_PTR(buf);
     if (wcsnicmp(info->Name.Buffer, L"\\Device\\", 8) == 0) {
         // 先頭の "/Device/" を "//?/" に置き換える
@@ -138,7 +155,7 @@ get_filesize(HANDLE file)
     BY_HANDLE_FILE_INFORMATION info;
 
     if (!GetFileInformationByHandle(file, &info)) {
-        raise_win32_error(GetLastError());
+        raise_win32_error(GetLastError(), Qnil);
     }
 
     return ((uint64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow;
@@ -163,35 +180,47 @@ check_namespace(int namespace)
 }
 
 
-static VALUE
-extattr_list0(HANDLE file)
+static void
+extattr_list_name(const char *ptr, void *(*yield)(void *user, VALUE name), void *user)
 {
-    VALUE iostatusblock = rb_str_buf_new(4096);
-    VALUE infobuf = rb_str_buf_new(65536);
-    rb_str_set_len(infobuf, 65536);
-    NTSTATUS status = NtQueryInformationFile(file,
-                                             (PIO_STATUS_BLOCK)RSTRING_PTR(iostatusblock),
-                                             RSTRING_PTR(infobuf), RSTRING_LEN(infobuf),
-                                             FileStreamInformation);
-    if (status != 0) { raise_ntstatus_error(status); }
-    const char *ptr = RSTRING_PTR(infobuf);
-    VALUE list = Qnil;
-    if (!rb_block_given_p()) { list = rb_ary_new(); }
     for (;;) {
         const FILE_STREAM_INFORMATION *info = (const FILE_STREAM_INFORMATION *)ptr;
         VALUE name = adsname2str(info->StreamName, info->StreamNameLength / 2);
         if (RSTRING_LEN(name) > 0) {
-            if (NIL_P(list)) {
-                rb_yield(name);
-            } else {
-                rb_ary_push(list, name);
-            }
+            yield(user, name);
         }
         size_t size = info->NextEntryOffset;
         if (size == 0) { break; }
         ptr += size;
     }
-    return list;
+}
+
+static VALUE
+extattr_list0(HANDLE file)
+{
+    VALUE iostatusblock = rb_str_buf_new(4096);
+    size_t size = 65536; // TODO: 最適値を見つける
+    VALUE infobuf = rb_str_buf_new(size);
+    char *ptr = RSTRING_PTR(infobuf);
+    memset(ptr, 0, sizeof(FILE_STREAM_INFORMATION));
+    NTSTATUS status = NtQueryInformationFile(file,
+                                             (PIO_STATUS_BLOCK)RSTRING_PTR(iostatusblock),
+                                             ptr, size,
+                                             FileStreamInformation);
+    check_status_error(status);
+
+    if (rb_block_given_p()) {
+        extattr_list_name(ptr,
+                          (void *(*)(void *, VALUE))rb_yield_values,
+                          (void *)1);
+        return Qnil;
+    } else {
+        VALUE list = rb_ary_new();
+        extattr_list_name(ptr,
+                          (void *(*)(void *, VALUE))rb_ary_push,
+                          (void *)list);
+        return list;
+    }
 }
 
 static VALUE
@@ -242,12 +271,13 @@ static VALUE
 file_s_extattr_list0(VALUE path, int namespace)
 {
     check_namespace(namespace);
-    HANDLE file = CreateFileW(STR2WPATH(path), 0,
+    VALUE path1 = path;
+    HANDLE file = CreateFileW(STR2WPATH(path1), 0,
                               FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
                               NULL, 3,
                               FILE_FLAG_BACKUP_SEMANTICS,
                               0);
-    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError(), path); }
     return rb_ensure(extattr_list0, (VALUE)file, file_close, (VALUE)file);
 }
 
@@ -255,12 +285,13 @@ static VALUE
 file_s_extattr_list_link0(VALUE path, int namespace)
 {
     check_namespace(namespace);
-    HANDLE file = CreateFileW(STR2WPATH(path), 0,
+    VALUE path1 = path;
+    HANDLE file = CreateFileW(STR2WPATH(path1), 0,
                               FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
                               NULL, 3,
                               FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
                               0);
-    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError(), path); }
     return rb_ensure(extattr_list0, (VALUE)file, file_close, (VALUE)file);
 }
 
@@ -268,14 +299,14 @@ static VALUE
 file_s_extattr_size0(VALUE path, int namespace, VALUE name)
 {
     check_namespace(namespace);
-    path = rb_str_plus(path, rb_str_new(":", 1));
-    rb_str_append(path, name);
-    HANDLE file = CreateFileW(STR2WPATH(path), 0,
+    VALUE path1 = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path1, name);
+    HANDLE file = CreateFileW(STR2WPATH(path1), 0,
                               FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
                               NULL, 3,
                               FILE_FLAG_BACKUP_SEMANTICS,
                               0);
-    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError(), path); }
     return rb_ensure(extattr_size0, (VALUE)file, file_close, (VALUE)file);
 }
 
@@ -283,14 +314,14 @@ static VALUE
 file_s_extattr_size_link0(VALUE path, int namespace, VALUE name)
 {
     check_namespace(namespace);
-    path = rb_str_plus(path, rb_str_new(":", 1));
-    rb_str_append(path, name);
-    HANDLE file = CreateFileW(STR2WPATH(path), 0,
+    VALUE path1 = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path1, name);
+    HANDLE file = CreateFileW(STR2WPATH(path1), 0,
                               FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
                               NULL, 3,
                               FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
                               0);
-    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError(), path); }
     return rb_ensure(extattr_size0, (VALUE)file, file_close, (VALUE)file);
 }
 
@@ -306,7 +337,7 @@ extattr_get0(VALUE args[3])
     VALUE buf = rb_str_buf_new(size);
     DWORD readsize = 0;
     if (!ReadFile(file, RSTRING_PTR(buf), size, &readsize, NULL)) {
-        raise_win32_error(GetLastError());
+        raise_win32_error(GetLastError(), Qnil);
     }
     rb_str_set_len(buf, readsize);
     return buf;
@@ -316,14 +347,14 @@ static VALUE
 extattr_get1(VALUE path, int flags, int namespace, VALUE name)
 {
     check_namespace(namespace);
-    path = rb_str_plus(path, rb_str_new(":", 1));
-    rb_str_append(path, name);
-    HANDLE file = CreateFileW(STR2WPATH(path), GENERIC_READ,
+    VALUE path1 = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path1, name);
+    HANDLE file = CreateFileW(STR2WPATH(path1), GENERIC_READ,
                               FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
                               NULL, 3,
                               FILE_FLAG_BACKUP_SEMANTICS | flags,
                               0);
-    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError(), path); }
     VALUE args[] = { (VALUE)file, (VALUE)namespace, name, };
     return rb_ensure(extattr_get0, (VALUE)args, file_close, (VALUE)file);
 }
@@ -351,7 +382,7 @@ extattr_set0(VALUE args[])
     if (size > EXTATTR_MAX) { rb_raise(rb_eSystemCallError, "extattr too huge"); }
     DWORD wrotesize = size;
     if (!WriteFile(file, RSTRING_PTR(data), size, &wrotesize, NULL)) {
-        raise_win32_error(GetLastError());
+        raise_win32_error(GetLastError(), Qnil);
     }
     return Qnil;
 }
@@ -360,14 +391,14 @@ static VALUE
 file_s_extattr_set0(VALUE path, int namespace, VALUE name, VALUE data)
 {
     check_namespace(namespace);
-    path = rb_str_plus(path, rb_str_new(":", 1));
-    rb_str_append(path, name);
-    HANDLE file = CreateFileW(STR2WPATH(path), GENERIC_WRITE,
+    VALUE path1 = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path1, name);
+    HANDLE file = CreateFileW(STR2WPATH(path1), GENERIC_WRITE,
                               FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
                               NULL, CREATE_ALWAYS,
                               FILE_FLAG_BACKUP_SEMANTICS,
                               0);
-    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError()); }
+    if (file == INVALID_HANDLE_VALUE) { raise_win32_error(GetLastError(), path); }
     VALUE args[] = { (VALUE)file, (VALUE)namespace, name, data };
     return rb_ensure(extattr_set0, (VALUE)args, file_close, (VALUE)file);
 }
@@ -382,9 +413,11 @@ static VALUE
 file_s_extattr_delete0(VALUE path, int namespace, VALUE name)
 {
     check_namespace(namespace);
-    path = rb_str_plus(path, rb_str_new(":", 1));
-    rb_str_append(path, name);
-    DeleteFileW(STR2WPATH(path));
+    VALUE path1 = rb_str_plus(path, rb_str_new(":", 1));
+    rb_str_append(path1, name);
+    if (!DeleteFileW(STR2WPATH(path1))) {
+        raise_win32_error(GetLastError(), path);
+    }
     return Qnil;
 }
 

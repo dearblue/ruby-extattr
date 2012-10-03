@@ -1,33 +1,39 @@
 #include <sys/types.h>
-#include <attr/xattr.h>
+#if HAVE_ATTR_XATTR_H
+#   include <attr/xattr.h>
+#else
+#   include <sys/xattr.h>
+#endif
 
-#define EXTATTR_NAMESPACE_USER 0
-#define EXTATTR_NAMESPACE_SYSTEM 1
+enum {
+    EXTATTR_NAMESPACE_USER,
+    EXTATTR_NAMESPACE_SYSTEM,
+    EXTATTR_NAMESPACE_TRUSTED,
+    EXTATTR_NAMESPACE_SECURITY,
+};
+
 
 static VALUE NAMESPACE_USER_PREFIX, NAMESPACE_SYSTEM_PREFIX;
 
 
 static VALUE
-extattr_list0(ssize_t (*func)(), void *d, int namespace)
+xattr_name(int namespace, VALUE name)
 {
-    ssize_t size = 65536;
-    VALUE buf = rb_str_buf_new(size);
-    char *ptr = RSTRING_PTR(buf);
-    size = func(d, ptr, size);
-    if (size < 0) { rb_sys_fail("listxattr call error"); }
-
-    VALUE (*reduce)(void *, VALUE);
-    void *first;
-    VALUE list;
-    if (rb_block_given_p()) {
-        reduce = (VALUE (*)(void *, VALUE))rb_yield_values;
-        first = (void *)1;
-        list = Qnil;
-    } else {
-        reduce = (VALUE (*)(void *, VALUE))rb_ary_push;
-        first = (void *)(list = rb_ary_new());
+    switch (namespace) {
+    case EXTATTR_NAMESPACE_USER:
+        return rb_str_plus(NAMESPACE_USER_PREFIX, name);
+    case EXTATTR_NAMESPACE_SYSTEM:
+        return rb_str_plus(NAMESPACE_SYSTEM_PREFIX, name);
+    default:
+        rb_raise(rb_eRuntimeError, "namespace error");
+        return Qnil;
     }
+}
 
+
+static inline void
+extattr_list_name(const char *ptr, size_t size, int namespace, VALUE (*reduce)(void *, VALUE), void *user)
+{
     const char *end = ptr + size;
     while (ptr < end) {
         int len = strlen(ptr);
@@ -42,11 +48,32 @@ extattr_list0(ssize_t (*func)(), void *d, int namespace)
         }
 
         name = rb_str_new_cstr(ptr);
-        reduce(first, name);
+        reduce(user, name);
         ptr += RSTRING_LEN(name) + 1; // 最後の『+1』は、ヌルバイトの分。
     }
+}
 
-    return list;
+static VALUE
+extattr_list0(ssize_t (*func)(), void *d, int namespace)
+{
+    ssize_t size = 65536;
+    VALUE buf = rb_str_buf_new(size);
+    char *ptr = RSTRING_PTR(buf);
+    size = func(d, ptr, size);
+    if (size < 0) { rb_sys_fail("listxattr call error"); }
+
+    if (rb_block_given_p()) {
+        extattr_list_name(ptr, size, namespace,
+                          (VALUE (*)(void *, VALUE))rb_yield_values,
+                          (void *)1);
+        return Qnil;
+    } else {
+        VALUE list = rb_ary_new();
+        extattr_list_name(ptr, size, namespace,
+                          (VALUE (*)(void *, VALUE))rb_ary_push,
+                          (void *)list);
+        return list;
+    }
 }
 
 static VALUE
@@ -67,20 +94,6 @@ file_s_extattr_list_link0(VALUE path, int namespace)
     return extattr_list0(llistxattr, StringValueCStr(path), namespace);
 }
 
-
-static VALUE
-xattr_name(int namespace, VALUE name)
-{
-    switch (namespace) {
-    case EXTATTR_NAMESPACE_USER:
-        return rb_str_plus(NAMESPACE_USER_PREFIX, name);
-    case EXTATTR_NAMESPACE_SYSTEM:
-        return rb_str_plus(NAMESPACE_SYSTEM_PREFIX, name);
-    default:
-        rb_raise(rb_eRuntimeError, "namespace error");
-        return Qnil;
-    }
-}
 
 static VALUE
 extattr_size0(ssize_t (*func)(), void *d, int namespace, VALUE name)
@@ -146,7 +159,7 @@ static VALUE
 extattr_set0(int (*func)(), void *d, int namespace, VALUE name, VALUE data)
 {
     name = xattr_name(namespace, name);
-    int status = func(d, StringValueCStr(name), RSTRING_PTR(data), RSTRING_LEN(data));
+    int status = func(d, StringValueCStr(name), RSTRING_PTR(data), RSTRING_LEN(data), 0);
     if (status < 0) { rb_sys_fail("getxattr call error"); }
     return Qnil;
 }
