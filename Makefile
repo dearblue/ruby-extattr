@@ -1,12 +1,9 @@
 
-extlib:
-	cd ext && make
+all: gem
 
-gem: extlib
-	-mkdir lib
-	cp ext/extattr.so lib/
+gem:
+	gem build extattr-x86-mingw32.gemspec
 	gem build extattr.gemspec
-	gem compile extattr-0.1.1.gem
 
 rdoc:
 	rdoc -e UTF-8 -m README.txt README.txt LICENSE.txt ext/extattr.c
@@ -15,4 +12,5 @@ spec:
 	rspec rspec/extattr.rb
 
 clean:
-	- cd ext && make clean
+	-cd lib/1.9.1 && make clean
+	-cd lib/2.0.0 && make clean
