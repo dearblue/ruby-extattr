@@ -1,3 +1,5 @@
+#@markup markdown
+
 Copyright (c) 2012, dearblue. All rights reserved.
 
 Redistribution and use in source and binary forms, with or
