@@ -141,9 +141,6 @@ extattr はファイルシステムの拡張属性を操作するライブラリ
   - `File::EXTATTR_IMPLEMENT` 定数によって、実装に関する情報が取得できるようになりました
 - 機能の改善
   - `File.extattr_each` / `File#extattr_each` によって、ファイル拡張属性の名前と値を繰り返し取得できるようになりました
-  - `ExtAttr` モジュールを導入しました
-    - `ExtAttr.list` / `ExtAttr.each` / `ExtAttr.get` / `ExtAttr.set` / `ExtAttr.delete` を利用できるようになりました  
-      これらのメソッドには『`!`』付きメソッドも用意してあります
 - Windows 版に関する改善
   - `File::EXTATTR_NAMESPACE_SYSTEM` によって、本来の拡張ファイル属性の操作が行えるようになりました
     (NtQueryEaFile / NtSetEaFile)
