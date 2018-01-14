@@ -147,13 +147,13 @@ File#extattr_each(namespace: File::EXTATTR_NAMESPACE_USER) { |name, data| ... } 
 ## 参考資料
 
   * extattr
-      * <http://www.freebsd.org/cgi/man.cgi?query=extattr&sektion=2>
+      * <https://www.freebsd.org/cgi/man.cgi?query=extattr&sektion=2>
   * xattr
-      * <http://linuxjm.sourceforge.jp/html/LDP_man-pages/man2/listxattr.2.html>
+      * <https://linuxjm.osdn.jp/html/LDP_man-pages/man2/listxattr.2.html>
   * windows
-      * <http://msdn.microsoft.com/en-us/library/cc232069.aspx>
-      * <http://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/FILE_INFORMATION_CLASS.html>
-      * <http://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/NtQueryInformationFile.html>
-      * <http://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/NtQueryEaFile.html>
-      * <http://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/NtSetEaFile.html>
-      * <http://www.zezula.net/en/fstools/filetest.html>
+      * <https://msdn.microsoft.com/en-us/library/cc232069.aspx>
+      * <https://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/FILE_INFORMATION_CLASS.html>
+      * <https://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/NtQueryInformationFile.html>
+      * <https://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/NtQueryEaFile.html>
+      * <https://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/NtSetEaFile.html>
+      * FileTest <http://www.zezula.net/en/fstools/filetest.html> <https://github.com/ladislav-zezula/FileTest>
