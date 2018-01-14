@@ -6,10 +6,10 @@
 #endif
 
 enum {
-    EXTATTR_NAMESPACE_USER,
-    EXTATTR_NAMESPACE_SYSTEM,
-    EXTATTR_NAMESPACE_TRUSTED,
-    EXTATTR_NAMESPACE_SECURITY,
+    EXTATTR_NAMESPACE_USER     = 1,
+    EXTATTR_NAMESPACE_SYSTEM   = 2,
+    EXTATTR_NAMESPACE_TRUSTED  = 3,
+    EXTATTR_NAMESPACE_SECURITY = 4,
 };
 
 
@@ -217,7 +217,7 @@ file_s_extattr_delete_link_main(VALUE path, int namespace1, VALUE name)
 
 
 static void
-ext_init_implement(void)
+extattr_init_implement(void)
 {
     NAMESPACE_USER_PREFIX = rb_str_new_cstr("user.");
     NAMESPACE_SYSTEM_PREFIX = rb_str_new_cstr("system.");
@@ -225,5 +225,5 @@ ext_init_implement(void)
     rb_gc_register_mark_object(NAMESPACE_USER_PREFIX);
     rb_gc_register_mark_object(NAMESPACE_SYSTEM_PREFIX);
 
-    rb_define_const(rb_cFile, "EXTATTR_IMPLEMANT", rb_str_freeze(rb_str_new_cstr("xattr")));
+    rb_define_const(mExtAttr, "IMPLEMENT", rb_str_freeze(rb_str_new_cstr("xattr")));
 }

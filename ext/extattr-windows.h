@@ -19,8 +19,8 @@
  */
 
 enum {
-    EXTATTR_NAMESPACE_USER = 0,
-    EXTATTR_NAMESPACE_SYSTEM = 1,
+    EXTATTR_NAMESPACE_USER = 1,
+    EXTATTR_NAMESPACE_SYSTEM = 2,
 
     /*
      * ADS は普通のファイルのように扱えるから、extattr とみなして扱う場合は容量の制限を設けることにする。
@@ -710,7 +710,7 @@ file_s_extattr_delete_link_main(VALUE path, int namespace1, VALUE name)
 
 
 static void
-ext_init_implement(void)
+extattr_init_implement(void)
 {
     ENCutf8p = rb_enc_find("UTF-8");
     ENCutf8 = rb_enc_from_encoding(ENCutf8p);
@@ -720,5 +720,5 @@ ext_init_implement(void)
     ENCutf16le = rb_enc_from_encoding(ENCutf16lep);
     rb_gc_register_address(&ENCutf16le);
 
-    rb_define_const(rb_cFile, "EXTATTR_IMPLEMANT", rb_str_freeze(rb_str_new_cstr("windows")));
+    rb_define_const(mExtAttr, "IMPLEMENT", rb_str_freeze(rb_str_new_cstr("windows")));
 }

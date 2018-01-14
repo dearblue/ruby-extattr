@@ -22,31 +22,31 @@ extattr_list_name(const char list[], size_t size, VALUE infection_source, void (
 }
 
 static int
-get_extattr_list_size(int (*extattr_list)(), intptr_t d, int namespace1)
+get_extattr_list_size(ssize_t (*extattr_list)(), intptr_t d, VALUE filesrc, int namespace1)
 {
     int size = extattr_list(d, namespace1, NULL, 0);
-    if (size < 0) { rb_sys_fail("extattr_list call error"); }
+    if (size < 0) { aux_sys_fail(filesrc, "extattr_list"); }
     return size;
 }
 
 static VALUE
-extattr_list_common(int (*extattr_list)(), intptr_t d, VALUE infection_source, int namespace1)
+extattr_list_common(ssize_t (*extattr_list)(), intptr_t d, VALUE filesrc, int namespace1)
 {
-    size_t size = get_extattr_list_size(extattr_list, d, namespace1);
+    size_t size = get_extattr_list_size(extattr_list, d, filesrc, namespace1);
     VALUE buf;
     char *ptr = ALLOCV(buf, size);
 
     ssize_t size1 = extattr_list(d, namespace1, ptr, size);
-    if (size1 < 0) { rb_sys_fail("extattr_list call error"); }
+    if (size1 < 0) { aux_sys_fail(filesrc, "extattr_list"); }
 
     VALUE list = Qnil;
     if (rb_block_given_p()) {
-        extattr_list_name(ptr, size1, infection_source,
+        extattr_list_name(ptr, size1, filesrc,
                           (void (*)(void *, VALUE))rb_yield_values, (void *)(1));
     } else {
         list = rb_ary_new();
-        OBJ_INFECT(list, infection_source);
-        extattr_list_name(ptr, size1, infection_source,
+        OBJ_INFECT(list, filesrc);
+        extattr_list_name(ptr, size1, filesrc,
                           (void (*)(void *, VALUE))rb_ary_push, (void *)list);
     }
     ALLOCV_END(buf);
@@ -74,7 +74,7 @@ file_s_extattr_list_link_main(VALUE path, int namespace1)
 
 
 static VALUE
-extattr_size_common(int (*extattr_get)(), intptr_t d, int namespace1, VALUE name)
+extattr_size_common(ssize_t (*extattr_get)(), intptr_t d, int namespace1, VALUE name)
 {
     ssize_t size = extattr_get(d, namespace1, RSTRING_PTR(name), NULL, 0);
     if (size < 0) { rb_sys_fail("extattr_get call error"); }
@@ -101,7 +101,7 @@ file_s_extattr_size_link_main(VALUE path, int namespace1, VALUE name)
 
 
 static VALUE
-extattr_get_common(int (*extattr_get)(), intptr_t d, VALUE path, int namespace1, VALUE name)
+extattr_get_common(ssize_t (*extattr_get)(), intptr_t d, VALUE path, int namespace1, VALUE name)
 {
     ssize_t size = extattr_get(d, namespace1, RSTRING_PTR(name), NULL, 0);
     if (size < 0) { rb_sys_fail(StringValueCStr(path)); }
@@ -132,7 +132,7 @@ file_s_extattr_get_link_main(VALUE path, int namespace1, VALUE name)
 
 
 static VALUE
-extattr_set_common(int (*extattr_set)(), intptr_t d, int namespace1, VALUE name, VALUE data)
+extattr_set_common(ssize_t (*extattr_set)(), intptr_t d, int namespace1, VALUE name, VALUE data)
 {
     int status = extattr_set(d, namespace1, RSTRING_PTR(name), RSTRING_PTR(data), RSTRING_LEN(data));
     if (status < 0) { rb_sys_fail("extattr_set call error"); }
@@ -186,7 +186,7 @@ file_s_extattr_delete_link_main(VALUE path, int namespace1, VALUE name)
 
 
 static void
-ext_init_implement(void)
+extattr_init_implement(void)
 {
-    rb_define_const(rb_cFile, "EXTATTR_IMPLEMANT", rb_str_freeze(rb_str_new_cstr("extattr")));
+    rb_define_const(mExtAttr, "IMPLEMENT", rb_str_freeze(rb_str_new_cstr("extattr")));
 }

@@ -29,7 +29,7 @@ static VALUE file_s_extattr_delete_main(VALUE path, int namespace1, VALUE name);
 static VALUE file_s_extattr_delete_link_main(VALUE path, int namespace1, VALUE name);
 
 // Init_extattr から呼び出される、環境ごとの初期設定。
-static void ext_init_implement(void);
+static void extattr_init_implement(void);
 
 
 #define RDOC(...)
@@ -37,6 +37,11 @@ static void ext_init_implement(void);
 #define ELEMENTOF(V) (sizeof(V) / sizeof((V)[0]))
 
 #define LOGF(FORMAT, ...) { fprintf(stderr, "%s:%d:%s: " FORMAT "\n", __FILE__, __LINE__, __func__, __VA_ARGS__); }
+
+static VALUE mExtAttr, mConstants;
+
+static ID id_downcase;
+static ID id_to_path;
 
 
 static inline VALUE
@@ -79,6 +84,33 @@ ext_error_namespace(VALUE path, int namespace1)
     ext_error_extattr(EPERM, path, rb_sprintf("namespace=%d", namespace1));
 }
 
+static VALUE
+aux_to_path(VALUE path)
+{
+    if (rb_respond_to(path, id_to_path)) {
+        VALUE args[] = { path };
+        path = rb_funcall2(path, id_to_path, 1, args);
+        rb_check_type(path, RUBY_T_STRING);
+    } else {
+        path = StringValue(path);
+    }
+
+    return path;
+}
+
+static void
+aux_sys_fail(VALUE filesrc, const char *funcname)
+{
+    VALUE tmp;
+    filesrc = aux_to_path(filesrc);
+    if (funcname) {
+        tmp = rb_sprintf("%s (%s error)", StringValueCStr(filesrc), funcname);
+    } else {
+        tmp = rb_sprintf("%s", StringValueCStr(filesrc));
+    }
+    rb_sys_fail(StringValueCStr(tmp));
+}
+
 
 #if defined(HAVE_SYS_EXTATTR_H)
 #   include "extattr-extattr.h"
@@ -91,12 +123,67 @@ ext_error_namespace(VALUE path, int namespace1)
 #endif
 
 
-static VALUE SYMnamespace;
+static VALUE
+aux_should_be_string(VALUE obj)
+{
+    rb_check_type(obj, RUBY_T_STRING);
+    return obj;
+}
 
 static int
-ext_get_namespace(VALUE opts)
+convert_namespace_int(VALUE namespace)
 {
-    return NUM2INT(hash_lookup(opts, SYMnamespace, INT2NUM(EXTATTR_NAMESPACE_USER)));
+    int n = NUM2INT(namespace);
+
+    if (n == EXTATTR_NAMESPACE_USER ||
+        n == EXTATTR_NAMESPACE_SYSTEM) {
+
+        return n;
+    }
+
+    rb_raise(rb_eArgError,
+            "wrong namespace value - #<%s:%p>",
+            rb_obj_classname(namespace), (void *)namespace);
+}
+
+static int
+convert_namespace_str(VALUE namespace)
+{
+    static const char ns_user[] = "user";
+    static const int ns_user_len = sizeof(ns_user) / sizeof(ns_user[0]) - 1;
+    static const char ns_system[] = "system";
+    static const int ns_system_len = sizeof(ns_system) / sizeof(ns_system[0]) - 1;
+
+    VALUE namespace1 = rb_funcall2(namespace, id_downcase, 0, 0);
+    rb_check_type(namespace1, RUBY_T_STRING);
+    const char *p;
+    int len;
+    RSTRING_GETMEM(namespace1, p, len);
+
+    if (len == ns_user_len && memcmp(p, ns_user, ns_user_len) == 0) {
+        return EXTATTR_NAMESPACE_USER;
+    } else if (len == ns_system_len && memcmp(p, ns_system, ns_system_len) == 0) {
+        return EXTATTR_NAMESPACE_SYSTEM;
+    } else {
+        rb_raise(rb_eArgError,
+                "wrong namespace - %s (expected to user or system)",
+                StringValueCStr(namespace));
+    }
+}
+
+static int
+conv_namespace(VALUE namespace)
+{
+    if (rb_obj_is_kind_of(namespace, rb_cNumeric)) {
+        return convert_namespace_int(namespace);
+    } else if (rb_obj_is_kind_of(namespace, rb_cString) ||
+               rb_obj_is_kind_of(namespace, rb_cSymbol)) {
+        return convert_namespace_str(rb_String(namespace));
+    } else {
+        rb_raise(rb_eArgError,
+                "wrong namespace object - %p",
+                (void *)namespace);
+    }
 }
 
 static void
@@ -178,293 +265,226 @@ ext_check_path_security(VALUE path, VALUE name, VALUE data)
 
 /*
  * call-seq:
- *  extattr_list(namespace: File::EXTATTR_NAMESPACE_USER) -> names array
- *  extattr_list(namespace: File::EXTATTR_NAMESPACE_USER) { |name| ... } -> nil
- *
- * 開いているファイルの拡張属性名一覧を得ます。
- *
- * ブロックが指定された場合、一つ一つの拡張属性名を渡してブロックが評価されます。ブロックの戻り値は無視されます。
+ *  list(path, namespace) -> names array
+ *  list(path, namespace) { |name| ... } -> nil
  */
 static VALUE
-file_extattr_list(int argc, VALUE argv[], VALUE file)
+ext_s_list(VALUE mod, VALUE path, VALUE namespace)
 {
-    VALUE opts = Qnil;
-    rb_scan_args(argc, argv, "0:", &opts);
-    ext_check_file_security(file, Qnil, Qnil);
-    return file_extattr_list_main(file, file2fd(file),
-                                  ext_get_namespace(opts));
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, Qnil, Qnil);
+        return file_extattr_list_main(path, file2fd(path),
+                conv_namespace(namespace));
+    } else {
+        ext_check_path_security(path, Qnil, Qnil);
+        return file_s_extattr_list_main(aux_to_path(path),
+                conv_namespace(namespace));
+    }
 }
 
 /*
  * call-seq:
- *  extattr_list(path, namespace: File::EXTATTR_NAMESPACE_USER) -> names array
- *  extattr_list(path, namespace: File::EXTATTR_NAMESPACE_USER) { |name| ... } -> nil
- *
- * ファイル名を指定すること以外は File#extattr_list と同じです。
+ *  extattr_list!(path, namespace) -> names array
+ *  extattr_list!(path, namespace) { |name| ... } -> nil
  */
 static VALUE
-file_s_extattr_list(int argc, VALUE argv[], VALUE file)
+ext_s_list_link(VALUE mod, VALUE path, VALUE namespace)
 {
-    VALUE path, opts = Qnil;
-    rb_scan_args(argc, argv, "1:", &path, &opts);
-    ext_check_path_security(path, Qnil, Qnil);
-    return file_s_extattr_list_main(StringValue(path),
-                                    ext_get_namespace(opts));
-}
-
-/*
- * call-seq:
- *  extattr_list!(path, namespace: File::EXTATTR_NAMESPACE_USER) -> names array
- *  extattr_list!(path, namespace: File::EXTATTR_NAMESPACE_USER) { |name| ... } -> nil
- *
- * シンボリックリンクに対する操作という以外は、File.extattr_list と同じです。
- */
-static VALUE
-file_s_extattr_list_link(int argc, VALUE argv[], VALUE file)
-{
-    VALUE path, opts = Qnil;
-    rb_scan_args(argc, argv, "1:", &path, &opts);
-    ext_check_path_security(path, Qnil, Qnil);
-    return file_s_extattr_list_link_main(StringValue(path),
-                                         ext_get_namespace(opts));
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, Qnil, Qnil);
+        return file_extattr_list_main(path, file2fd(path),
+                conv_namespace(namespace));
+    } else {
+        ext_check_path_security(path, Qnil, Qnil);
+        return file_s_extattr_list_link_main(aux_to_path(path),
+                conv_namespace(namespace));
+    }
 }
 
 
 /*
  * call-seq:
- *  extattr_size(name, namespace: File::EXTATTR_NAMESPACE_USER) -> names array
- *
- * 拡張属性の大きさを取得します。
+ *  size(path, namespace, name) -> size
  */
 static VALUE
-file_extattr_size(int argc, VALUE argv[], VALUE file)
+ext_s_size(VALUE mod, VALUE path, VALUE namespace, VALUE name)
 {
-    VALUE name, opts = Qnil;
-    rb_scan_args(argc, argv, "1:", &name, &opts);
-    ext_check_file_security(file, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    return file_extattr_size_main(file, file2fd(file),
-                                  ext_get_namespace(opts),
-                                  StringValue(name));
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, name, Qnil);
+        return file_extattr_size_main(path, file2fd(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    } else {
+        ext_check_path_security(path, name, Qnil);
+        return file_s_extattr_size_main(aux_to_path(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    }
 }
 
 /*
  * call-seq:
- *  extattr_size(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> size
+ *  size!(path, namespace, name) -> size
  */
 static VALUE
-file_s_extattr_size(int argc, VALUE argv[], VALUE file)
+ext_s_size_link(VALUE mod, VALUE path, VALUE namespace, VALUE name)
 {
-    VALUE path, name, opts = Qnil;
-    rb_scan_args(argc, argv, "2:", &path, &name, &opts);
-    ext_check_path_security(path, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    return file_s_extattr_size_main(StringValue(path),
-                                    ext_get_namespace(opts),
-                                    StringValue(name));
-}
-
-/*
- * call-seq:
- *  extattr_size!(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> size
- */
-static VALUE
-file_s_extattr_size_link(int argc, VALUE argv[], VALUE file)
-{
-    VALUE path, name, opts = Qnil;
-    rb_scan_args(argc, argv, "2:", &path, &name, &opts);
-    ext_check_path_security(path, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    return file_s_extattr_size_link_main(StringValue(path),
-                                         ext_get_namespace(opts),
-                                         StringValue(name));
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, name, Qnil);
+        return file_extattr_size_main(path, file2fd(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    } else {
+        ext_check_path_security(path, name, Qnil);
+        return file_s_extattr_size_link_main(aux_to_path(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    }
 }
 
 
 /*
  * call-seq:
- *  extattr_get(name, namespace: File::EXTATTR_NAMESPACE_USER) -> data
+ *  get(path, namespace, name) -> data
  */
 static VALUE
-file_extattr_get(int argc, VALUE argv[], VALUE file)
+ext_s_get(VALUE mod, VALUE path, VALUE namespace, VALUE name)
 {
-    VALUE name, opts = Qnil;
-    rb_scan_args(argc, argv, "1:", &name, &opts);
-    ext_check_file_security(file, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    VALUE v = file_extattr_get_main(file, file2fd(file),
-                                    ext_get_namespace(opts),
-                                    StringValue(name));
-    OBJ_INFECT(v, file);
+    VALUE v;
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, name, Qnil);
+        v = file_extattr_get_main(path, file2fd(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    } else {
+        ext_check_path_security(path, name, Qnil);
+        v = file_s_extattr_get_main(aux_to_path(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    }
+
+    rb_obj_infect(v, path);
     return v;
 }
 
 /*
  * call-seq:
- *  extattr_get(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> data
+ *  get!(path, namespace, name) -> data
  */
 static VALUE
-file_s_extattr_get(int argc, VALUE argv[], VALUE file)
+ext_s_get_link(VALUE mod, VALUE path, VALUE namespace, VALUE name)
 {
-    VALUE path, name, opts = Qnil;
-    rb_scan_args(argc, argv, "2:", &path, &name, &opts);
-    ext_check_path_security(path, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    VALUE v = file_s_extattr_get_main(StringValue(path),
-                                      ext_get_namespace(opts),
-                                      StringValue(name));
-    OBJ_INFECT(v, path);
-    return v;
-}
+    VALUE v;
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, name, Qnil);
+        v = file_extattr_get_main(path, file2fd(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    } else {
+        ext_check_path_security(path, name, Qnil);
+        v = file_s_extattr_get_link_main(aux_to_path(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    }
 
-/*
- * call-seq:
- *  extattr_get!(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> data
- */
-static VALUE
-file_s_extattr_get_link(int argc, VALUE argv[], VALUE file)
-{
-    VALUE path, name, opts = Qnil;
-    rb_scan_args(argc, argv, "2:", &path, &name, &opts);
-    ext_check_path_security(path, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    VALUE v = file_s_extattr_get_link_main(StringValue(path),
-                                           ext_get_namespace(opts),
-                                           StringValue(name));
-    OBJ_INFECT(v, path);
+    rb_obj_infect(v, path);
     return v;
 }
 
 
 /*
  * call-seq:
- *  extattr_set(name, data, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
+ *  set(path, namespace, name, data) -> nil
  */
 static VALUE
-file_extattr_set(int argc, VALUE argv[], VALUE file)
+ext_s_set(VALUE mod, VALUE path, VALUE namespace, VALUE name, VALUE data)
 {
-    VALUE name, data, opts = Qnil;
-    rb_scan_args(argc, argv, "2:", &name, &data, &opts);
-    ext_check_file_security(file, name, data);
-    Check_Type(name, RUBY_T_STRING);
-    return file_extattr_set_main(file, file2fd(file),
-                                 ext_get_namespace(opts),
-                                 StringValue(name),
-                                 StringValue(data));
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, name, Qnil);
+        return file_extattr_set_main(path, file2fd(path),
+                conv_namespace(namespace),
+                aux_should_be_string(name), aux_should_be_string(data));
+    } else {
+        ext_check_path_security(path, name, Qnil);
+        return file_s_extattr_set_main(aux_to_path(path),
+                conv_namespace(namespace),
+                aux_should_be_string(name), aux_should_be_string(data));
+    }
 }
 
 /*
  * call-seq:
- *  extattr_set(path, name, data, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
+ *  set!(path, namespace, name, data) -> nil
  */
 static VALUE
-file_s_extattr_set(int argc, VALUE argv[], VALUE file)
+ext_s_set_link(VALUE mod, VALUE path, VALUE namespace, VALUE name, VALUE data)
 {
-    VALUE path, name, data, opts = Qnil;
-    rb_scan_args(argc, argv, "3:", &path, &name, &data, &opts);
-    ext_check_path_security(path, name, data);
-    Check_Type(name, RUBY_T_STRING);
-    return file_s_extattr_set_main(StringValue(path),
-                                   ext_get_namespace(opts),
-                                   StringValue(name),
-                                   StringValue(data));
-}
-
-/*
- * call-seq:
- *  extattr_set!(path, name, data, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
- */
-static VALUE
-file_s_extattr_set_link(int argc, VALUE argv[], VALUE file)
-{
-    VALUE path, name, data, opts = Qnil;
-    rb_scan_args(argc, argv, "3:", &path, &name, &data, &opts);
-    ext_check_path_security(path, name, data);
-    Check_Type(name, RUBY_T_STRING);
-    return file_s_extattr_set_link_main(StringValue(path),
-                                        ext_get_namespace(opts),
-                                        StringValue(name),
-                                        StringValue(data));
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, name, Qnil);
+        return file_extattr_set_main(path, file2fd(path),
+                conv_namespace(namespace),
+                aux_should_be_string(name), aux_should_be_string(data));
+    } else {
+        ext_check_path_security(path, name, Qnil);
+        return file_s_extattr_set_link_main(aux_to_path(path),
+                conv_namespace(namespace),
+                aux_should_be_string(name), aux_should_be_string(data));
+    }
 }
 
 
 /*
  * call-seq:
- *  extattr_delete(name, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
+ *  delete(path, namespace, name) -> nil
  */
 static VALUE
-file_extattr_delete(int argc, VALUE argv[], VALUE file)
+ext_s_delete(VALUE mod, VALUE path, VALUE namespace, VALUE name)
 {
-    VALUE name, opts = Qnil;
-    rb_scan_args(argc, argv, "1:", &name, &opts);
-    ext_check_file_security(file, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    return file_extattr_delete_main(file, file2fd(file),
-                                    ext_get_namespace(opts),
-                                    StringValue(name));
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, name, Qnil);
+        return file_extattr_delete_main(path, file2fd(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    } else {
+        ext_check_path_security(path, name, Qnil);
+        return file_s_extattr_delete_main(aux_to_path(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    }
 }
 
 /*
  * call-seq:
- *  extattr_delete(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
+ *  delete!(path, namespace, name) -> nil
  */
 static VALUE
-file_s_extattr_delete(int argc, VALUE argv[], VALUE file)
+ext_s_delete_link(VALUE mod, VALUE path, VALUE namespace, VALUE name)
 {
-    VALUE path, name, opts = Qnil;
-    rb_scan_args(argc, argv, "2:", &path, &name, &opts);
-    ext_check_path_security(path, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    return file_s_extattr_delete_main(StringValue(path),
-                                      ext_get_namespace(opts),
-                                      StringValue(name));
-}
-
-/*
- * call-seq:
- *  extattr_delete!(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
- */
-static VALUE
-file_s_extattr_delete_link(int argc, VALUE argv[], VALUE file)
-{
-    VALUE path, name, opts = Qnil;
-    rb_scan_args(argc, argv, "2:", &path, &name, &opts);
-    ext_check_path_security(path, name, Qnil);
-    Check_Type(name, RUBY_T_STRING);
-    return file_s_extattr_delete_link_main(StringValue(path),
-                                           ext_get_namespace(opts),
-                                           StringValue(name));
+    if (rb_obj_is_kind_of(path, rb_cFile)) {
+        ext_check_file_security(path, name, Qnil);
+        return file_extattr_delete_main(path, file2fd(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    } else {
+        ext_check_path_security(path, name, Qnil);
+        return file_s_extattr_delete_link_main(aux_to_path(path), conv_namespace(namespace),
+                aux_should_be_string(name));
+    }
 }
 
 
 void
 Init_extattr(void)
 {
-    SYMnamespace = ID2SYM(rb_intern_const("namespace"));
+    id_downcase = rb_intern("downcase");
+    id_to_path = rb_intern("to_path");
 
-    rb_define_const(rb_cFile, "EXTATTR_NAMESPACE_USER", INT2NUM(EXTATTR_NAMESPACE_USER));
-    rb_define_const(rb_cFile, "EXTATTR_NAMESPACE_SYSTEM", INT2NUM(EXTATTR_NAMESPACE_SYSTEM));
-    rb_define_const(rb_cFile, "EXTATTR_VERSION", rb_str_freeze(rb_str_new_cstr("0.2")));
+    mExtAttr = rb_define_module("ExtAttr");
+    mConstants = rb_define_module_under(mExtAttr, "Constants");
+    rb_include_module(mExtAttr, mConstants);
 
-    rb_define_method(rb_cFile, "extattr_list", RUBY_METHOD_FUNC(file_extattr_list), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_list", RUBY_METHOD_FUNC(file_s_extattr_list), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_list!", RUBY_METHOD_FUNC(file_s_extattr_list_link), -1);
+    rb_define_const(mConstants, "NAMESPACE_USER", INT2NUM(EXTATTR_NAMESPACE_USER));
+    rb_define_const(mConstants, "NAMESPACE_SYSTEM", INT2NUM(EXTATTR_NAMESPACE_SYSTEM));
 
-    rb_define_method(rb_cFile, "extattr_size", RUBY_METHOD_FUNC(file_extattr_size), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_size", RUBY_METHOD_FUNC(file_s_extattr_size), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_size!", RUBY_METHOD_FUNC(file_s_extattr_size_link), -1);
+    rb_define_singleton_method(mExtAttr, "list", RUBY_METHOD_FUNC(ext_s_list), 2);
+    rb_define_singleton_method(mExtAttr, "list!", RUBY_METHOD_FUNC(ext_s_list_link), 2);
+    rb_define_singleton_method(mExtAttr, "size", RUBY_METHOD_FUNC(ext_s_size), 3);
+    rb_define_singleton_method(mExtAttr, "size!", RUBY_METHOD_FUNC(ext_s_size_link), 3);
+    rb_define_singleton_method(mExtAttr, "get", RUBY_METHOD_FUNC(ext_s_get), 3);
+    rb_define_singleton_method(mExtAttr, "get!", RUBY_METHOD_FUNC(ext_s_get_link), 3);
+    rb_define_singleton_method(mExtAttr, "set", RUBY_METHOD_FUNC(ext_s_set), 4);
+    rb_define_singleton_method(mExtAttr, "set!", RUBY_METHOD_FUNC(ext_s_set_link), 4);
+    rb_define_singleton_method(mExtAttr, "delete", RUBY_METHOD_FUNC(ext_s_delete), 3);
+    rb_define_singleton_method(mExtAttr, "delete!", RUBY_METHOD_FUNC(ext_s_delete_link), 3);
 
-    rb_define_method(rb_cFile, "extattr_get", RUBY_METHOD_FUNC(file_extattr_get), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_get", RUBY_METHOD_FUNC(file_s_extattr_get), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_get!", RUBY_METHOD_FUNC(file_s_extattr_get_link), -1);
-
-    rb_define_method(rb_cFile, "extattr_set", RUBY_METHOD_FUNC(file_extattr_set), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_set", RUBY_METHOD_FUNC(file_s_extattr_set), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_set!", RUBY_METHOD_FUNC(file_s_extattr_set_link), -1);
-
-    rb_define_method(rb_cFile, "extattr_delete", RUBY_METHOD_FUNC(file_extattr_delete), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_delete", RUBY_METHOD_FUNC(file_s_extattr_delete), -1);
-    rb_define_singleton_method(rb_cFile, "extattr_delete!", RUBY_METHOD_FUNC(file_s_extattr_delete_link), -1);
-
-    ext_init_implement();
+    extattr_init_implement();
 }

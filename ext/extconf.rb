@@ -1,11 +1,6 @@
 #!ruby
-#vim: set fileencoding:utf-8
-
-raise "require ruby-1.9.3+" unless RUBY_VERSION >= "1.9.3"
 
 require "mkmf"
-
-#$CFLAGS << " -std=c99"
 
 case
 when have_header("sys/extattr.h")
@@ -28,6 +23,5 @@ EOM
   exit 1
 end
 
-#$CFLAGS << " -std=c99"
-
-create_makefile "extattr"
+ver = RUBY_VERSION.slice(/\d+\.\d+/)
+create_makefile File.join(ver, "extattr")
