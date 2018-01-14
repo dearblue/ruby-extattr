@@ -6,6 +6,10 @@
 
         $ extattr [-l] [-U | -S] [file...]
 
+        ディレクトリを指定した場合は、そのディレクトリと直下のエントリについて一覧表示する
+
+        ただし、ls と同様に "-d" スイッチをつけた場合は直下のエントリは表示しない
+
 - 拡張属性を定義する
 
         $ extattr -s attr-name=attr-value [-U | -S] [-f | -n | -i] file...
@@ -16,7 +20,7 @@
 
 - 拡張属性を削除する
 
-        $ extattr -d attr-name [-U | -S] file...
+        $ extattr -c attr-name [-U | -S] file...
 
 - (FUTURE) 拡張属性をパターンに従って表示する
 
@@ -39,7 +43,7 @@ opt.separator("operators:")
 opt.on("-l", "list extattr (default)") { mode = :list }
 opt.on("-g name", "get extattr") { |v| mode = :get; extattr = v }
 opt.on("-s name=val", "set extattr", /\A.+=.*/) { |v| mode = :set; extattr = v }
-opt.on("-d name", "delete extattr") { |v| mode = :delete; extattr = v }
+opt.on("-c name", "clear extattr") { |v| mode = :delete; extattr = v }
 opt.on("-V", "print version") { mode = :print_version }
 
 opt.separator("")
@@ -53,6 +57,8 @@ value_only = false
 opt.on("-0", "not print LF and print value only (with `-g' operator)") { value_only = true }
 value_stdin = false
 opt.on("-I", "Input from stdin for attr-value (with `-s' operator)") { value_stdin = true }
+list_children = true
+opt.on("-d", "not print child entries (with `-l' operator)") { list_children = false }
 
 opt.separator ""
 overwrite = nil
@@ -60,6 +66,34 @@ opt.on("-f", "force overwrite") { overwrite = true }
 opt.on("-n", "do not overwrite") { overwrite = false }
 opt.on("-i", "interactive confirm when overwrite") { overwrite = nil }
 opt.parse!
+
+
+module MyExtensions
+  unless Dir.respond_to?(:children)
+    refine Dir.singleton_class do
+      def children(path)
+        children = entries(path)
+        children.reject! { |e| e == "." || e == ".." }
+        children.sort!
+        children
+      end
+    end
+  end
+
+  unless Dir.respond_to?(:each_child)
+    refine Dir.singleton_class do
+      def each_child(path, &block)
+        return to_enum(__method__, path) unless block_given?
+
+        children(path).each(&block)
+
+        nil
+      end
+    end
+  end
+end
+
+using MyExtensions
 
 
 def direxpand(path)
@@ -81,6 +115,30 @@ def list(path, namespace: nil)
   list = File.extattr_list!(path, namespace: namespace)
   unless list.empty?
     puts "#{path} \t#{list.join("\t")}"
+  end
+end
+
+def list_files(files, list_children, namespace)
+  files.each do |path|
+    begin
+      list path, namespace: namespace
+    rescue SystemCallError
+      $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+    else
+      begin
+        if File.directory?(path) && list_children
+          Dir.each_child(path) do |e|
+            begin
+              list File.join(path, e), namespace: namespace
+            rescue SystemCallError
+              $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+            end
+          end
+        end
+      rescue SystemCallError
+        $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+      end
+    end
   end
 end
 
@@ -126,15 +184,7 @@ if ARGV.empty?
 else
   case mode
   when :list
-    ARGV.each do |path0|
-      direxpand(path0) do |path|
-        begin
-          list path, namespace: namespace
-        rescue SystemCallError
-          $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
-        end
-      end
-    end
+    list_files(ARGV, list_children, namespace)
   when :get
     ARGV.each do |path|
       begin
