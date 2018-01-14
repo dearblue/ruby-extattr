@@ -14,6 +14,9 @@ when have_header("sys/xattr.h")
 when have_header("winnt.h") && have_header("ntdef.h") && have_header("psapi.h") &&
      have_header("ddk/ntifs.h") && have_header("ddk/winddk.h") &&
      have_library("ntoskrnl") && have_library("ntdll") && have_library("psapi")
+  if RbConfig::CONFIG["arch"] =~ /mingw/
+    $LDFLAGS << " -static-libgcc -static-libstdc++"
+  end
 
 else
   $stderr.puts <<EOM
