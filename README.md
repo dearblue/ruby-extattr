@@ -1,18 +1,18 @@
-
 # extattr - filesystem extended attributes manipurator for ruby
 
 extattr is filesystem extended attributes manipurator for ruby on FreeBSD, GNU/Linux and Microsoft Windows.
 
-  * package name: extattr
-  * author: dearblue (mailto:dearblue@users.noreply.github.com)
-  * version: 0.3
-  * software quality: TECHNICAL PREVIEW
-  * license: 2-clause BSD License
-  * report issue to: <https://github.com/dearblue/ruby-extattr>
-  * dependency ruby: ruby-2.3+
-  * dependency ruby gems: (none)
-  * dependency libraries: (none)
-  * bundled external libraries: (none)
+  * package name: [extattr](https://rubygems.org/gems/extattr)
+  * Author: dearblue (mailto:dearblue@users.noreply.github.com)
+  * Version: 0.3
+  * Product quality: PROTOTYPE, UNSTABLE
+  * License: [2-clause BSD License](LICENSE.md)
+  * Project page: <https://github.com/dearblue/ruby-extattr>
+  * Support ruby: ruby-2.3+
+
+----
+
+  * [HISTORY](HISTORY.ja.md) (In Japanese)
 
 ***END OF DOCUMENT IN ENGLISH***
 
