@@ -1,4 +1,4 @@
-#vim: set fileencoding:utf-8
+#!ruby
 
 require "tmpdir"
 basedir = File.join(Dir.tmpdir, "ruby-extattr.test-work")
