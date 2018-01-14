@@ -1,4 +1,7 @@
-#@markup markdown
+
+extattr license (2-clause BSD License)
+
+- - - -
 
 Copyright (c) 2012, dearblue. All rights reserved.
 
