@@ -1,105 +1,212 @@
-#vim: set fileencoding:utf-8
 
-AUTHOR = "dearblue"
-EMAIL = "dearblue@users.sourceforge.jp"
-WEBSITE = "http://sourceforge.jp/projects/rutsubo/"
-LICENSE = "2-clause BSD License"
-PACKAGE = "extattr"
-VERSION = "0.2"
-PLATFORM_NATIVE = Gem::Platform.local.to_s
-GEMFILE = "#{PACKAGE}-#{VERSION}.gem"
-GEMFILE_NATIVE = "#{PACKAGE}-#{VERSION}-#{PLATFORM_NATIVE}.gem"
-GEMSPEC = "#{PACKAGE}.gemspec"
-GEMSPEC_NATIVE = "#{PACKAGE}-#{PLATFORM_NATIVE}.gemspec"
-SUMMARY = "extended attribute operation library for ruby"
-DESCRIPTION = <<EOS
-extattr is extended file attribute operation library for ruby.
-Supported for FreeBSD (extattr), GNU/Linux (xattr) and Microsoft Windows (NTFS ADS + Extended Attributes).
-EOS
+require "pathname"
+require "rake/clean"
 
-RUBY19 = ENV["RUBY19"]
-RUBY20 = ENV["RUBY20"]
-RUBY21 = ENV["RUBY21"]
-RUBYSET = [RUBY19, RUBY20, RUBY21].compact
+docnames = "{README,LICENSE,CHANGELOG,Changelog,HISTORY}"
+doctypes = "{,.txt,.rd,.rdoc,.md,.markdown}"
+cexttypes = "{c,C,cc,cxx,cpp,h,H,hh}"
 
-#RUBY_VERSIONS = [RUBY20].map { |ruby| [`#{ruby} -e "puts RUBY_VERSION"`.slice(/\d+\.\d+/), ruby] }
-RUBY_VERSIONS = RUBYSET.map { |ruby| [`#{ruby} -e "puts RbConfig::CONFIG['ruby_version']"`.chomp, ruby] }
+DOC = FileList["#{docnames}{,.ja}#{doctypes}"] +
+      FileList["{contrib,ext}/**/#{docnames}{,.ja}#{doctypes}"] +
+      FileList["ext/**/*.#{cexttypes}"]
+EXT = FileList["ext/**/*"]
+BIN = FileList["bin/*"]
+LIB = FileList["lib/**/*.rb"]
+SPEC = FileList["spec/**/*"]
+TEST = FileList["test/**/*"]
+EXAMPLE = FileList["examples/**/*"]
+GEMSTUB_SRC = "gemstub.rb"
+RAKEFILE = [File.basename(__FILE__), GEMSTUB_SRC]
+EXTRA = []
+EXTCONF = FileList["ext/**/extconf.rb"]
+EXTCONF.reject! { |n| !File.file?(n) }
+EXTMAP = {}
 
-BINFILES = FileList["bin/*"]
-EXTFILES = FileList["ext/{*.h,*.c,*.cc}"]
-LIBFILES = FileList["lib/**/*.rb"]
-SOFILES_SET = RUBY_VERSIONS.map { |(ver, ruby)| ["lib/#{ver}/#{PACKAGE}.so", ruby] }
-SOFILES = SOFILES_SET.map { |(lib, ruby)| lib }
-EXTCONF = FileList["ext/extconf.rb"]
+load GEMSTUB_SRC
 
-SPECSTUB = Gem::Specification.new do |s|
-  s.name = PACKAGE
-  s.version = VERSION
-  s.summary = SUMMARY
-  s.description = DESCRIPTION
-  s.homepage = WEBSITE
-  s.license = LICENSE
-  s.author = AUTHOR
-  s.email = EMAIL
-  s.executables = BINFILES.map { |n| File.basename n }
-  s.files = %w(LICENSE.md README.md Rakefile) + FileList["spec/*.rb"] + BINFILES + EXTCONF + EXTFILES + LIBFILES
-  s.rdoc_options = %w(--charset UTF-8 --main README.md)
-  #s.rdoc_options = %w(--charset UTF-8 --locale ja --main README.md)
-  s.has_rdoc = false
-  s.required_ruby_version = ">= 1.9.3"
-  s.add_development_dependency "rspec", "~> 2.14"
-  s.add_development_dependency "rake", "~> 10.0"
+EXTMAP.dup.each_pair do |dir, name|
+  EXTMAP[Pathname.new(dir).cleanpath.to_s] = Pathname.new(name).cleanpath.to_s
+end
+
+GEMSTUB.extensions += EXTCONF
+GEMSTUB.executables += FileList["bin/*"].map { |n| File.basename n }
+GEMSTUB.executables.sort!
+
+PACKAGENAME = "#{GEMSTUB.name}-#{GEMSTUB.version}"
+GEMFILE = "#{PACKAGENAME}.gem"
+GEMSPEC = "#{PACKAGENAME}.gemspec"
+
+GEMSTUB.files += DOC + EXT + EXTCONF + BIN + LIB + SPEC + TEST + EXAMPLE + RAKEFILE + EXTRA
+GEMSTUB.files.sort!
+if GEMSTUB.rdoc_options.nil? || GEMSTUB.rdoc_options.empty?
+  readme = %W(.md .markdown .rd .rdoc .txt #{""}).map { |ext| "README#{ext}" }.find { |m| DOC.find { |n| n == m } }
+  GEMSTUB.rdoc_options = %w(--charset UTF-8) + (readme ? %W(-m #{readme}) : [])
+end
+GEMSTUB.extra_rdoc_files += DOC + LIB + EXT.reject { |n| n.include?("/externals/") || !%w(.h .hh .c .cc .cpp .cxx).include?(File.extname(n)) }
+GEMSTUB.extra_rdoc_files.sort!
+
+GEMSTUB_TRYOUT = GEMSTUB.dup
+GEMSTUB_TRYOUT.version = "#{GEMSTUB.version}#{Time.now.strftime(".TRYOUT.%Y%m%d.%H%M%S")}"
+PACKAGENAME_TRYOUT = "#{GEMSTUB.name}-#{GEMSTUB_TRYOUT.version}"
+GEMFILE_TRYOUT = "#{PACKAGENAME_TRYOUT}.gem"
+GEMSPEC_TRYOUT = "#{PACKAGENAME_TRYOUT}.gemspec"
+
+CLEAN << GEMSPEC << GEMSPEC_TRYOUT
+CLOBBER << GEMFILE
+
+task :default => :tryout do
+  $stderr.puts <<-EOS
+#{__FILE__}:#{__LINE__}:
+\ttype ``rake release'' to build release package.
+  EOS
+end
+
+desc "build tryout package"
+task :tryout
+
+desc "build release package"
+task :release => :all
+
+unless EXTCONF.empty?
+  RUBYSET ||= (ENV["RUBYSET"] || "").split(",")
+
+  if RUBYSET.nil? || RUBYSET.empty?
+    $stderr.puts <<-EOS
+#{__FILE__}:
+|
+| If you want binary gem package, launch rake with ``RUBYSET`` enviroment
+| variable for set ruby interpreters by comma separated.
+|
+|   e.g.) $ rake RUBYSET=ruby
+|     or) $ rake RUBYSET=ruby21,ruby22,ruby23
+|
+    EOS
+  else
+    platforms = RUBYSET.map { |ruby| `#{ruby} --disable-gems -e "puts RUBY_PLATFORM"`.chomp }
+    platforms1 = platforms.uniq
+    unless platforms1.size == 1 && !platforms1[0].empty?
+      abort <<-EOS
+#{__FILE__}:#{__LINE__}: different platforms:
+#{RUBYSET.zip(platforms).map { |ruby, platform| "%24s => %s" % [ruby, platform] }.join("\n")}
+ABORTED.
+      EOS
+    end
+    PLATFORM = platforms1[0]
+
+    RUBY_VERSIONS = RUBYSET.map do |ruby|
+      ver = `#{ruby} --disable-gems -e "puts RUBY_VERSION"`.slice(/\d+\.\d+/)
+      raise "failed ruby checking - ``#{ruby}''" unless $?.success?
+      [ver, ruby]
+    end
+
+    SOFILES_SET = RUBY_VERSIONS.map { |(ver, ruby)|
+      EXTCONF.map { |extconf|
+        extdir = Pathname.new(extconf).cleanpath.dirname.to_s
+        case
+        when soname = EXTMAP[extdir.sub(/^ext\//i, "")]
+          soname = soname.sub(/\.so$/i, "")
+        when extdir == "ext" || extdir == "."
+          soname = GEMSTUB.name
+        else
+          soname = File.basename(extdir)
+        end
+
+        [ruby, File.join("lib", "#{soname.sub(/(?<=\/)|^(?!.*\/)/, "#{ver}/")}.so"), extconf]
+      }
+    }.flatten(1)
+    SOFILES = SOFILES_SET.map { |(ruby, sopath, extconf)| sopath }
+
+    GEMSTUB_NATIVE = GEMSTUB.dup
+    GEMSTUB_NATIVE.files += SOFILES
+    GEMSTUB_NATIVE.platform = Gem::Platform.new(PLATFORM).to_s
+    GEMSTUB_NATIVE.extensions.clear
+    GEMFILE_NATIVE = "#{GEMSTUB_NATIVE.name}-#{GEMSTUB_NATIVE.version}-#{GEMSTUB_NATIVE.platform}.gem"
+    GEMSPEC_NATIVE = "#{GEMSTUB_NATIVE.name}-#{GEMSTUB_NATIVE.platform}.gemspec"
+
+    task :all => ["native-gem", GEMFILE]
+
+    desc "build binary gem package"
+    task "native-gem" => GEMFILE_NATIVE
+
+    desc "generate binary gemspec"
+    task "native-gemspec" => GEMSPEC_NATIVE
+
+    file GEMFILE_NATIVE => DOC + EXT + EXTCONF + BIN + LIB + SPEC + TEST + EXAMPLE + SOFILES + RAKEFILE + [GEMSPEC_NATIVE] do
+      sh "gem build #{GEMSPEC_NATIVE}"
+    end
+
+    file GEMSPEC_NATIVE => RAKEFILE do
+      File.write(GEMSPEC_NATIVE, GEMSTUB_NATIVE.to_ruby, mode: "wb")
+    end
+
+    desc "build c-extension libraries"
+    task "sofiles" => SOFILES
+
+    SOFILES_SET.each do |(ruby, soname, extconf)|
+      sodir = File.dirname(soname)
+      makefile = File.join(sodir, "Makefile")
+
+      CLEAN << GEMSPEC_NATIVE << sodir
+      CLOBBER << GEMFILE_NATIVE
+
+      directory sodir
+
+      desc "generate Makefile for binary extension library"
+      file makefile => [sodir, extconf] do
+        rel_extconf = Pathname.new(extconf).relative_path_from(Pathname.new(sodir)).to_s
+        cd sodir do
+          sh *%W"#{ruby} #{rel_extconf} --ruby=#{ruby} #{ENV["EXTCONF"]}"
+        end
+      end
+
+      desc "build binary extension library"
+      file soname => [makefile] + EXT do
+        cd sodir do
+          sh "make"
+        end
+      end
+    end
+  end
 end
 
 
-task :default => :gem
-task :gem => [GEMFILE_NATIVE, GEMFILE]
-task :gemspec => GEMSPEC
-task :gemspec_native => GEMSPEC_NATIVE
-task :gemfile => GEMFILE
-task :gemfile_native => GEMFILE_NATIVE
+task :all => GEMFILE
+task :tryout => GEMFILE_TRYOUT
 
-task :rdoc do
-  sh "yardoc --charset UTF-8 --locale ja --main README.md README.md LICENSE.md #{(EXTFILES + LIBFILES).join(" ")}"
+desc "generate local rdoc"
+task :rdoc => DOC + LIB do
+  sh *(%w(rdoc) + GEMSTUB.rdoc_options + DOC + LIB)
 end
 
+desc "launch rspec"
+task rspec: :all do
+  sh "rspec"
+end
 
-file GEMFILE => [GEMSPEC] + BINFILES + EXTFILES + LIBFILES do
+desc "build gem package"
+task gem: GEMFILE
+
+desc "generate gemspec"
+task gemspec: GEMSPEC
+
+desc "print package name"
+task "package-name" do
+  puts PACKAGENAME
+end
+
+file GEMFILE => DOC + EXT + EXTCONF + BIN + LIB + SPEC + TEST + EXAMPLE + RAKEFILE + [GEMSPEC] do
   sh "gem build #{GEMSPEC}"
 end
 
-file GEMFILE_NATIVE => [GEMSPEC_NATIVE] + BINFILES + EXTFILES + LIBFILES + SOFILES do
-  sh "gem build #{GEMSPEC_NATIVE}"
+file GEMFILE_TRYOUT => DOC + EXT + EXTCONF + BIN + LIB + SPEC + TEST + EXAMPLE + RAKEFILE + [GEMSPEC_TRYOUT] do
+#file GEMFILE_TRYOUT do
+  sh "gem build #{GEMSPEC_TRYOUT}"
 end
 
-file GEMSPEC => __FILE__ do
-  s = SPECSTUB.dup
-  s.extensions += EXTCONF
-  File.write(GEMSPEC, s.to_ruby, mode: "wb")
+file GEMSPEC => RAKEFILE do
+  File.write(GEMSPEC, GEMSTUB.to_ruby, mode: "wb")
 end
 
-file GEMSPEC_NATIVE => __FILE__ do
-  s = SPECSTUB.dup
-  s.files += SOFILES
-  s.platform = PLATFORM_NATIVE
-  File.write(GEMSPEC_NATIVE, s.to_ruby, mode: "wb")
-end
-
-SOFILES_SET.each do |(soname, ruby)|
-  sodir = File.dirname(soname)
-  makefile = File.join(sodir, "Makefile")
-
-  directory sodir
-
-  file soname => [makefile] + EXTFILES do
-    cd sodir do
-      sh "make"
-    end
-  end
-
-  file makefile => [sodir] + EXTCONF do
-    cd sodir do
-      sh "#{ruby} ../../ext/extconf.rb"
-    end
-  end
+file GEMSPEC_TRYOUT => RAKEFILE do
+  File.write(GEMSPEC_TRYOUT, GEMSTUB_TRYOUT.to_ruby, mode: "wb")
 end
