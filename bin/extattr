@@ -1,0 +1,178 @@
+#!ruby
+
+=begin
+
+- 拡張属性名を表示する
+
+        $ extattr [-l] [-U | -S] [file...]
+
+- 拡張属性を定義する
+
+        $ extattr -s attr-name=attr-value [-U | -S] [-f | -n | -i] file...
+
+- 拡張属性を表示する
+
+        $ extattr -g attr-name [-U | -S] file...
+
+- 拡張属性を削除する
+
+        $ extattr -d attr-name [-U | -S] file...
+
+- (FUTURE) 拡張属性をパターンに従って表示する
+
+        $ extattr -G pattern [-U | -S] file...
+
+- (FUTURE) 拡張属性をパターンに従って削除する
+
+        $ extattr -D pattern [-U | -S] file...
+
+=end
+
+require "extattr"
+require "optparse"
+
+opt = OptionParser.new(nil, 12, " ")
+mode = :list
+extattr = nil
+
+opt.separator("operators:")
+opt.on("-l", "list extattr (default)") { mode = :list }
+opt.on("-g name", "get extattr") { |v| mode = :get; extattr = v }
+opt.on("-s name=val", "set extattr", /\A.+=.*/) { |v| mode = :set; extattr = v }
+opt.on("-d name", "delete extattr") { |v| mode = :delete; extattr = v }
+opt.on("-V", "print version") { mode = :print_version }
+
+opt.separator("")
+opt.separator("switches:")
+namespace = File::EXTATTR_NAMESPACE_USER
+opt.on("-U", "change namespace to user") { namespace = File::EXTATTR_NAMESPACE_USER }
+opt.on("-S", "change namespace to system") { namespace = File::EXTATTR_NAMESPACE_SYSTEM }
+
+opt.separator ""
+value_only = false
+opt.on("-0", "not print LF and print value only (with `-g' operator)") { value_only = true }
+value_stdin = false
+opt.on("-I", "Input from stdin for attr-value (with `-s' operator)") { value_stdin = true }
+
+opt.separator ""
+overwrite = nil
+opt.on("-f", "force overwrite") { overwrite = true }
+opt.on("-n", "do not overwrite") { overwrite = false }
+opt.on("-i", "interactive confirm when overwrite") { overwrite = nil }
+opt.parse!
+
+
+def direxpand(path)
+  if File.directory? path
+    yield path
+    Dir.glob(File.join(path.gsub(/[\[\{\}\*\?\,]/, "[\\0]"), "*"), File::FNM_DOTMATCH).sort.each do |path1|
+      next if path1 =~ /(?:^|\/)\.+$/
+
+      yield path1
+    end
+  else
+    yield path
+  end
+
+  path
+end
+
+def list(path, namespace: nil)
+  list = File.extattr_list!(path, namespace: namespace)
+  unless list.empty?
+    puts "#{path} \t#{list.join("\t")}"
+  end
+end
+
+def confirm_overwrite(mesg)
+  while true
+    $stderr.print "#{mesg}\n\toverwrite? (y/n): "
+    case $stdin.gets.chomp.downcase
+    when "y", "yes"
+      return true
+    when "n", "no"
+      return false
+    else
+      #$stderr.puts "-- once again --"
+    end
+  end
+end
+
+
+if mode == :print_version
+    puts <<-EOS
+#{File.basename $0}:
+  version: #{ExtAttr::VERSION}
+  runtime ruby engine: #{RUBY_DESCRIPTION}
+    EOS
+    exit 0
+end
+
+if ARGV.empty?
+  unless mode == :list
+    $stderr.puts "#{File.basename $0}: should be given filename\n"
+    exit 1
+  end
+
+  Dir.glob("*", File::FNM_DOTMATCH) do |path|
+    next if path =~ /(?:^|\/)\.+$/
+
+    begin
+      list path, namespace: namespace
+    rescue SystemCallError
+      $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+    end
+  end
+else
+  case mode
+  when :list
+    ARGV.each do |path0|
+      direxpand(path0) do |path|
+        begin
+          list path, namespace: namespace
+        rescue SystemCallError
+          $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+        end
+      end
+    end
+  when :get
+    ARGV.each do |path|
+      begin
+        v = File.extattr_get!(path, extattr, namespace: namespace)
+        if value_only
+          print v
+        else
+          puts "#{path} \t#{v}\n"
+        end
+      rescue SystemCallError
+        $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+      end
+    end
+  when :set
+    (name, *, value) = extattr.partition("=")
+    if value_stdin
+      unless value.empty?
+        $stderr.puts "#{File.basename $0}: Ignored given value in command line, for stdin - ``#{value}''\n"
+      end
+      value = $stdin.read
+    end
+    ARGV.each do |path|
+      if File.extattr_list!(path, namespace: namespace).include?(name)
+        case overwrite
+        when nil
+          next unless confirm_overwrite "`#{name}' is exist already in `#{path}'"
+        when false
+          next
+        end
+      end
+
+      begin
+        File.extattr_set!(path, name, value, namespace: namespace)
+      rescue SystemCallError
+        $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+      end
+    end
+  else
+    raise NotImplementedError
+  end
+end
