@@ -10,6 +10,7 @@
 #include <ruby.h>
 #include <ruby/io.h>
 #include <ruby/intern.h>
+#include <ruby/version.h>
 
 
 static VALUE file_extattr_list_main(VALUE file, int fd, int namespace1);
@@ -186,6 +187,10 @@ conv_namespace(VALUE namespace)
     }
 }
 
+#if RUBY_API_VERSION_CODE >= 20700
+static void ext_check_file_security(VALUE file, VALUE name, VALUE data) { }
+static void ext_check_path_security(VALUE path, VALUE name, VALUE data) { }
+#else
 static void
 ext_check_file_security(VALUE file, VALUE name, VALUE data)
 {
@@ -261,6 +266,7 @@ ext_check_path_security(VALUE path, VALUE name, VALUE data)
         rb_insecure_operation();
     }
 }
+#endif
 
 
 /*
