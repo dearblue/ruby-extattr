@@ -131,7 +131,7 @@ def list_files(files, list_children, namespace)
             begin
               list File.join(path, e), namespace: namespace
             rescue SystemCallError
-              $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+              #$stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
             end
           end
         end
