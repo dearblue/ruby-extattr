@@ -127,7 +127,7 @@ def list_files(files, list_children, namespace)
     else
       begin
         if File.directory?(path) && list_children
-          Dir.each_child(path) do |e|
+          Dir.children(path).sort.each do |e|
             begin
               list File.join(path, e), namespace: namespace
             rescue SystemCallError
