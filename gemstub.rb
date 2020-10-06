@@ -1,6 +1,4 @@
-if File.read("README.md", 4096) =~ /^\s*\*\s*version:{1,2}\s*(.+)/i
-  version = $1
-else
+unless version = File.read("README.md").scan(/^\s*[\*\-]\s*version:{1,2}\s*(.+)/i).flatten[-1]
   raise "バージョン情報が README.md に見つかりません"
 end
 
