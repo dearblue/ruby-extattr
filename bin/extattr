@@ -84,6 +84,7 @@ module MyExtensions
 end
 
 using MyExtensions
+using ExtAttr
 
 
 opt = OptionParser.new(nil, 12, " ")

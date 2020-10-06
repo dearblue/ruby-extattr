@@ -113,15 +113,7 @@ module ExtAttr
     end
   end
 
-  module File
-    module Constants
-      EXTATTR_NAMESPACE_USER = ExtAttr::USER
-      EXTATTR_NAMESPACE_SYSTEM = ExtAttr::SYSTEM
-      EXTATTR_IMPLEMENT = ExtAttr::IMPLEMENT
-    end
-
-    include Constants
-
+  refine File do
     def extattr(namespace: ExtAttr::USER)
       ExtAttr::Accessor[self, to_path, namespace]
     end
@@ -173,9 +165,7 @@ module ExtAttr
     end
   end
 
-  module FileClass
-    include ExtAttr::File::Constants
-
+  refine File.singleton_class do
     def extattr(path, namespace: ExtAttr::USER)
       ExtAttr.open(path, namespace: namespace)
     end
@@ -228,9 +218,4 @@ module ExtAttr
       ExtAttr.delete(path, namespace, name)
     end
   end
-end
-
-class File
-  include ExtAttr::File
-  extend ExtAttr::FileClass
 end
