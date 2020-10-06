@@ -16,7 +16,7 @@ end
 #
 # 拡張属性の名前空間を指定する場合、以下の値が利用できます:
 #
-# * ExtAttr::NAMESPACE_USER, ExtAttr::NAMESPACE_SYSTEM、
+# * ExtAttr::USER, ExtAttr::SYSTEM、
 #   File::EXTATTR_NAMESPACE_USER、File::EXTATTR_NAMESPACE_SYSTEM
 # * 文字列又はシンボルで +user+、+system+ (大文字小文字を区別しません)
 #
@@ -29,14 +29,17 @@ end
 #   拡張属性名に "user." または "system." を追加して処理されます。
 #
 # Windows::
-#   NAMESPACE_USER の場合は NTFS Alternative Data Stream (ADS) として処理されます。
+#   ExtAttr::USER の場合は NTFS Alternative Data Stream (ADS) として処理されます。
 #
-#   NAMESPACE_SYSTEM の場合は NTFS Extended Attribute (EA) として処理されます。
+#   ExtAttr::SYSTEM の場合は NTFS Extended Attribute (EA) として処理されます。
 #
 module ExtAttr
   ExtAttr = self
 
-  def self.open(path, namespace: NAMESPACE_USER)
+  USER = NAMESPACE_USER
+  SYSTEM = NAMESPACE_SYSTEM
+
+  def self.open(path, namespace: USER)
     if path.kind_of?(File)
       ExtAttr::Accessor[path, path.to_path, namespace]
     else
@@ -112,60 +115,60 @@ module ExtAttr
 
   module File
     module Constants
-      EXTATTR_NAMESPACE_USER = ExtAttr::NAMESPACE_USER
-      EXTATTR_NAMESPACE_SYSTEM = ExtAttr::NAMESPACE_SYSTEM
+      EXTATTR_NAMESPACE_USER = ExtAttr::USER
+      EXTATTR_NAMESPACE_SYSTEM = ExtAttr::SYSTEM
       EXTATTR_IMPLEMENT = ExtAttr::IMPLEMENT
     end
 
     include Constants
 
-    def extattr(namespace: EXTATTR_NAMESPACE_USER)
+    def extattr(namespace: ExtAttr::USER)
       ExtAttr::Accessor[self, to_path, namespace]
     end
 
     #
     # Enumeration file extattr.
     #
-    def extattr_each(namespace: ExtAttr::NAMESPACE_USER, &block)
+    def extattr_each(namespace: ExtAttr::USER, &block)
       ExtAttr.each(self, namespace, &block)
     end
 
     #
     # call-seq:
-    #   extattr_list(namespace: File::EXTATTR_NAMESPACE_USER) -> array of strings
-    #   extattr_list(namespace: File::EXTATTR_NAMESPACE_USER) { |name| ... } -> enumerator
+    #   extattr_list(namespace: ExtAttr::USER) -> array of strings
+    #   extattr_list(namespace: ExtAttr::USER) { |name| ... } -> enumerator
     #
     # Get file extattr list.
     #
-    def extattr_list(namespace: ExtAttr::NAMESPACE_USER, &block)
+    def extattr_list(namespace: ExtAttr::USER, &block)
       ExtAttr.list(self, namespace, &block)
     end
 
     #
     # Get file extattr data size.
     #
-    def extattr_size(name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_size(name, namespace: ExtAttr::USER)
       ExtAttr.size(self, namespace, name)
     end
 
     #
     # Get file extattr data.
     #
-    def extattr_get(name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_get(name, namespace: ExtAttr::USER)
       ExtAttr.get(self, namespace, name)
     end
 
     #
     # Set file extattr data.
     #
-    def extattr_set(name, value, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_set(name, value, namespace: ExtAttr::USER)
       ExtAttr.set(self, namespace, name, value)
     end
 
     #
     # Delete file extattr.
     #
-    def extattr_delete(name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_delete(name, namespace: ExtAttr::USER)
       ExtAttr.delete(self, namespace, name)
     end
   end
@@ -173,55 +176,55 @@ module ExtAttr
   module FileClass
     include ExtAttr::File::Constants
 
-    def extattr(path, namespace: EXTATTR_NAMESPACE_USER)
+    def extattr(path, namespace: ExtAttr::USER)
       ExtAttr.open(path, namespace: namespace)
     end
 
-    def extattr_each(path, namespace: ExtAttr::NAMESPACE_USER, &block)
+    def extattr_each(path, namespace: ExtAttr::USER, &block)
       ExtAttr.each(path, namespace, &block)
     end
 
-    def extattr_each!(path, namespace: ExtAttr::NAMESPACE_USER, &block)
+    def extattr_each!(path, namespace: ExtAttr::USER, &block)
       ExtAttr.each!(path, namespace, &block)
     end
 
-    def extattr_list(path, namespace: ExtAttr::NAMESPACE_USER, &block)
+    def extattr_list(path, namespace: ExtAttr::USER, &block)
       ExtAttr.list(path, namespace, &block)
     end
 
-    def extattr_list!(path, namespace: ExtAttr::NAMESPACE_USER, &block)
+    def extattr_list!(path, namespace: ExtAttr::USER, &block)
       ExtAttr.list!(path, namespace, &block)
     end
 
-    def extattr_get(path, name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_get(path, name, namespace: ExtAttr::USER)
       ExtAttr.get(path, namespace, name)
     end
 
-    def extattr_get!(path, name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_get!(path, name, namespace: ExtAttr::USER)
       ExtAttr.get(path, namespace, name)
     end
 
-    def extattr_size(path, name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_size(path, name, namespace: ExtAttr::USER)
       ExtAttr.size(path, namespace, name)
     end
 
-    def extattr_size!(path, name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_size!(path, name, namespace: ExtAttr::USER)
       ExtAttr.size(path, namespace, name)
     end
 
-    def extattr_set(path, name, value, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_set(path, name, value, namespace: ExtAttr::USER)
       ExtAttr.set(path, namespace, name, value)
     end
 
-    def extattr_set!(path, name, value, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_set!(path, name, value, namespace: ExtAttr::USER)
       ExtAttr.set(path, namespace, name, value)
     end
 
-    def extattr_delete(path, name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_delete(path, name, namespace: ExtAttr::USER)
       ExtAttr.delete(path, namespace, name)
     end
 
-    def extattr_delete!(path, name, namespace: ExtAttr::NAMESPACE_USER)
+    def extattr_delete!(path, name, namespace: ExtAttr::USER)
       ExtAttr.delete(path, namespace, name)
     end
   end

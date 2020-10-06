@@ -99,9 +99,9 @@ opt.on("-V", "print version") { mode = :print_version }
 
 opt.separator("")
 opt.separator("switches:")
-namespace = File::EXTATTR_NAMESPACE_USER
-opt.on("-U", "change namespace to user") { namespace = File::EXTATTR_NAMESPACE_USER }
-opt.on("-S", "change namespace to system") { namespace = File::EXTATTR_NAMESPACE_SYSTEM }
+namespace = ExtAttr::USER
+opt.on("-U", "change namespace to user") { namespace = ExtAttr::USER }
+opt.on("-S", "change namespace to system") { namespace = ExtAttr::SYSTEM }
 
 opt.separator ""
 value_only = false
