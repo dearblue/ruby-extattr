@@ -35,6 +35,57 @@
 require "extattr"
 require "optparse"
 
+
+module MyExtensions
+  unless Dir.respond_to?(:children)
+    refine Dir.singleton_class do
+      def children(path)
+        children = entries(path)
+        children.reject! { |e| e == "." || e == ".." }
+        children.sort!
+        children
+      end
+    end
+  end
+
+  unless Dir.respond_to?(:each_child)
+    refine Dir.singleton_class do
+      def each_child(path, &block)
+        return to_enum(__method__, path) unless block_given?
+        children(path).each(&block)
+        nil
+      end
+    end
+  end
+
+  refine Array do
+    def to_plain_text(nest = 0, output = "")
+      nest += 1
+      each { |e| e.to_plain_text(nest, output); output << "\n" }
+      output
+    end
+  end
+
+  refine Hash do
+    def to_plain_text(nest = 0, output = "")
+      indent = "\t" * nest
+      nest += 1
+      each { |k, v| output << %(#{indent}#{k} \t#{v}\n) }
+      output
+    end
+  end
+
+  refine String do
+    def to_plain_text(nest = 0, output = "")
+      indent = "\t" * nest
+      output << gsub(/^/, indent)
+    end
+  end
+end
+
+using MyExtensions
+
+
 opt = OptionParser.new(nil, 12, " ")
 mode = :list
 extattr = nil
@@ -59,6 +110,15 @@ value_stdin = false
 opt.on("-I", "Input from stdin for attr-value (with `-s' operator)") { value_stdin = true }
 list_children = true
 opt.on("-d", "not print child entries (with `-l' operator)") { list_children = false }
+format = ->(doc) { doc.to_plain_text }
+opt.on("-Y", "print to YAML format") {
+  require "yaml"
+  format = ->(doc) { doc.to_yaml }
+}
+opt.on("-J", "print to JSON format") {
+  require "json"
+  format = ->(doc) { doc.to_json }
+}
 
 opt.separator ""
 overwrite = nil
@@ -66,34 +126,6 @@ opt.on("-f", "force overwrite") { overwrite = true }
 opt.on("-n", "do not overwrite") { overwrite = false }
 opt.on("-i", "interactive confirm when overwrite") { overwrite = nil }
 opt.parse!
-
-
-module MyExtensions
-  unless Dir.respond_to?(:children)
-    refine Dir.singleton_class do
-      def children(path)
-        children = entries(path)
-        children.reject! { |e| e == "." || e == ".." }
-        children.sort!
-        children
-      end
-    end
-  end
-
-  unless Dir.respond_to?(:each_child)
-    refine Dir.singleton_class do
-      def each_child(path, &block)
-        return to_enum(__method__, path) unless block_given?
-
-        children(path).each(&block)
-
-        nil
-      end
-    end
-  end
-end
-
-using MyExtensions
 
 
 def direxpand(path)
@@ -142,6 +174,22 @@ def list_files(files, list_children, namespace)
   end
 end
 
+def get_to_print(list, extattr, namespace, value_only, ignore_error: false, &block)
+  list = list.reduce({}) do |a, path|
+    begin
+      v = File.extattr_get!(path, extattr, namespace: namespace)
+      v.encode!("utf-8", "utf-8") rescue nil unless value_only
+      a[path] = v
+    rescue SystemCallError
+      $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n" unless ignore_error
+    end
+
+    a
+  end
+
+  puts yield(list)
+end
+
 def confirm_overwrite(mesg)
   while true
     $stderr.print "#{mesg}\n\toverwrite? (y/n): "
@@ -167,37 +215,31 @@ if mode == :print_version
 end
 
 if ARGV.empty?
-  unless mode == :list
+  case mode
+  when :list
+    Dir.glob("*", File::FNM_DOTMATCH).sort.each do |path|
+      next if path =~ /(?:^|\/)\.+$/
+
+      begin
+        list path, namespace: namespace
+      rescue SystemCallError
+        $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+      end
+    end
+  when :get
+    list = Dir.children(".")
+    list.sort!
+    get_to_print(list, extattr, namespace, value_only, ignore_error: true, &format)
+  else
     $stderr.puts "#{File.basename $0}: should be given filename\n"
     exit 1
-  end
-
-  Dir.glob("*", File::FNM_DOTMATCH) do |path|
-    next if path =~ /(?:^|\/)\.+$/
-
-    begin
-      list path, namespace: namespace
-    rescue SystemCallError
-      $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
-    end
   end
 else
   case mode
   when :list
     list_files(ARGV, list_children, namespace)
   when :get
-    ARGV.each do |path|
-      begin
-        v = File.extattr_get!(path, extattr, namespace: namespace)
-        if value_only
-          print v
-        else
-          puts "#{path} \t#{v}\n"
-        end
-      rescue SystemCallError
-        $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
-      end
-    end
+    get_to_print(ARGV, extattr, namespace, value_only, &format)
   when :set
     (name, *, value) = extattr.partition("=")
     if value_stdin
