@@ -16,7 +16,7 @@ Supported for FreeBSD (extattr), GNU/Linux (xattr) and Microsoft Windows (NTFS A
   s.homepage = "https://github.com/dearblue/ruby-extattr"
   s.license = "BSD-2-Clause"
   s.author = "dearblue"
-  s.email = "dearblue@users.noreply.github.com"
+  s.email = "dearblue@users.osdn.me"
 
   s.add_development_dependency "rake", "~> 0"
 end

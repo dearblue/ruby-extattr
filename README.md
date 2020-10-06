@@ -2,14 +2,6 @@
 
 extattr is filesystem extended attributes manipurator for ruby on FreeBSD, GNU/Linux and Microsoft Windows.
 
-  * package name: [extattr](https://rubygems.org/gems/extattr)
-  * Author: dearblue (mailto:dearblue@users.noreply.github.com)
-  * Version: 0.3
-  * Product quality: PROTOTYPE, UNSTABLE
-  * License: [2-clause BSD License](LICENSE.md)
-  * Project page: <https://github.com/dearblue/ruby-extattr>
-  * Support ruby: ruby-2.3+
-
 ----
 
   * [HISTORY](HISTORY.ja.md) (In Japanese)
@@ -139,7 +131,7 @@ File#extattr_each(namespace: File::EXTATTR_NAMESPACE_USER) { |name, data| ... } 
 
 ## 既知のバグ
 
-  * ``extattr_list`` のブロック内で ``extattr_set`` ``extattr_delete`` を行うと思いがけない副作用が起こる場合がある
+  * ``extattr_list`` のブロック内で ``extattr_set`` ``extattr_delete`` を行うと正確な列挙がされない場合がある
 
     解決方法: ``extattr_set`` か ``extattr_delete`` のどちらかを同時に利用したい場合、``extattr_list.each`` を用いてください。
 
@@ -157,3 +149,13 @@ File#extattr_each(namespace: File::EXTATTR_NAMESPACE_USER) { |name, data| ... } 
       * <https://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/NtQueryEaFile.html>
       * <https://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/File/NtSetEaFile.html>
       * FileTest <http://www.zezula.net/en/fstools/filetest.html> <https://github.com/ladislav-zezula/FileTest>
+
+## Specification
+
+  - package name: [extattr](https://rubygems.org/gems/extattr)
+  - Author: dearblue
+  - Version: 0.3
+  - Product quality: PROTOTYPE, UNSTABLE
+  - License: [2-clause BSD License](LICENSE.md)
+  - Project page: <https://github.com/dearblue/ruby-extattr>
+  - Support ruby: ruby-2.3+

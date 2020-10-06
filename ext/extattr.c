@@ -2,9 +2,9 @@
 
 /*
  * extattr.c
- * AUTHOR:: dearblue <dearblue@zoho.com>
+ * AUTHOR:: dearblue <dearblue@users.osdn.me>
  * LICENSE:: 2-clause BSD License
- * WWW:: http://sourceforge.jp/projects/rutsubo
+ * PROJECT-PAGE:: https://github.com/dearblue/ruby-extattr
  */
 
 #include <ruby.h>
