@@ -481,8 +481,8 @@ Init_extattr(void)
     mConstants = rb_define_module_under(mExtAttr, "Constants");
     rb_include_module(mExtAttr, mConstants);
 
-    rb_define_const(mConstants, "NAMESPACE_USER", INT2NUM(EXTATTR_NAMESPACE_USER));
-    rb_define_const(mConstants, "NAMESPACE_SYSTEM", INT2NUM(EXTATTR_NAMESPACE_SYSTEM));
+    rb_define_const(mConstants, "NAMESPACE_USER", ID2SYM(rb_intern("user")));
+    rb_define_const(mConstants, "NAMESPACE_SYSTEM", ID2SYM(rb_intern("system")));
 
     rb_define_singleton_method(mExtAttr, "list", RUBY_METHOD_FUNC(ext_s_list), 2);
     rb_define_singleton_method(mExtAttr, "list!", RUBY_METHOD_FUNC(ext_s_list_link), 2);
