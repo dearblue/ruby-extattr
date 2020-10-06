@@ -14,7 +14,7 @@ GEMSTUB = Gem::Specification.new do |s|
 Supported for FreeBSD (extattr), GNU/Linux (xattr) and Microsoft Windows (NTFS Alternative Data Stream (ADS) + NTFS Extended Attributes (EA)).
   EOS
   s.homepage = "https://github.com/dearblue/ruby-extattr"
-  s.license = "BSD 2-clause License"
+  s.license = "BSD-2-Clause"
   s.author = "dearblue"
   s.email = "dearblue@users.noreply.github.com"
 
