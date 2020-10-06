@@ -32,6 +32,9 @@ static VALUE file_s_extattr_delete_link_main(VALUE path, int namespace1, VALUE n
 // Init_extattr から呼び出される、環境ごとの初期設定。
 static void extattr_init_implement(void);
 
+#if RUBY_API_VERSION_CODE >= 20700
+# define rb_obj_infect(OBJ, SRC) ((void)0)
+#endif
 
 #define RDOC(...)
 
