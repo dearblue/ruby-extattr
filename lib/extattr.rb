@@ -71,6 +71,8 @@ module ExtAttr
   end
 
   class Accessor < Struct.new(:obj, :path, :namespace)
+    BasicStruct = superclass
+
     def [](name)
       ExtAttr.get(obj, namespace, name)
     end
