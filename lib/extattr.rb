@@ -2,8 +2,12 @@
 
 ver = RUBY_VERSION.slice(/\d+\.\d+/)
 soname = File.basename(__FILE__, ".rb") << ".so"
-lib = File.join(File.dirname(__FILE__), ver, soname)
-require_relative File.join(ver, soname)
+lib = File.join(ver, soname)
+begin
+  require_relative lib
+rescue LoadError
+  require lib
+end
 
 #
 # Add operation methods of filesystem extended attributes to File.
