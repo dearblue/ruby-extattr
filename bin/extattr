@@ -178,7 +178,7 @@ def list_files(files, list_children, namespace, &format)
     end
   end
 
-  puts yield result
+  puts yield result unless result.empty?
 end
 
 def get_to_print(list, extattr, namespace, value_only, ignore_error: false, &block)
@@ -194,7 +194,7 @@ def get_to_print(list, extattr, namespace, value_only, ignore_error: false, &blo
     a
   end
 
-  puts yield(list)
+  puts yield(list) unless list.empty?
 end
 
 def confirm_overwrite(mesg)
