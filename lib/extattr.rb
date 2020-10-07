@@ -35,11 +35,11 @@ end
 module ExtAttr
   ExtAttr = self
 
-  def self.open(path, namespace: USER)
+  def self.open(path)
     if path.kind_of?(File)
-      ExtAttr::Accessor[path, path.to_path, namespace]
+      ExtAttr::Accessor[path, path.to_path]
     else
-      ExtAttr::Accessor[::File.open(path), path, namespace]
+      ExtAttr::Accessor[::File.open(path), path]
     end
   end
 
@@ -69,7 +69,7 @@ module ExtAttr
     self
   end
 
-  class Accessor < Struct.new(:obj, :path, :namespace)
+  class Accessor < Struct.new(:obj, :path)
     BasicStruct = superclass
 
     def [](name)
@@ -84,34 +84,34 @@ module ExtAttr
       end
     end
 
-    def each(&block)
+    def each(namespace: ExtAttr::USER, &block)
       ExtAttr.each(obj, namespace, &block)
     end
 
-    def list(&block)
+    def list(namespace: ExtAttr::USER, &block)
       ExtAttr.list(obj, namespace, &block)
     end
 
-    def size(name)
+    def size(name, namespace: ExtAttr::USER)
       ExtAttr.size(obj, namespace, name)
     end
 
-    def get(name)
+    def get(name, namespace: ExtAttr::USER)
       ExtAttr.get(obj, namespace, name)
     end
 
-    def set(name, data)
+    def set(name, data, namespace: ExtAttr::USER)
       ExtAttr.set(obj, namespace, name, data)
     end
 
-    def delete(name)
+    def delete(name, namespace: ExtAttr::USER)
       ExtAttr.delete(obj, namespace, name)
     end
   end
 
   refine File do
-    def extattr(namespace: ExtAttr::USER)
-      ExtAttr::Accessor[self, to_path, namespace]
+    def extattr
+      ExtAttr::Accessor[self, to_path]
     end
 
     #
