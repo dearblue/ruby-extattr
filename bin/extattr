@@ -60,8 +60,8 @@ module MyExtensions
 
   refine Array do
     def to_plain_text(nest = 0, output = "")
-      nest += 1
-      each { |e| e.to_plain_text(nest, output); output << "\n" }
+      nest += 1 if nest > 0
+      each { |e| e.to_plain_text(nest, output) }
       output
     end
   end
@@ -70,7 +70,7 @@ module MyExtensions
     def to_plain_text(nest = 0, output = "")
       indent = "\t" * nest
       nest += 1
-      each { |k, v| output << %(#{indent}#{k} \t#{v}\n) }
+      each { |k, v| output << %(#{indent}#{k} \t#{Array(v).join("\t")}\n) }
       output
     end
   end
@@ -111,14 +111,22 @@ value_stdin = false
 opt.on("-I", "Input from stdin for attr-value (with `-s' operator)") { value_stdin = true }
 list_children = true
 opt.on("-d", "not print child entries (with `-l' operator)") { list_children = false }
-format = ->(doc) { doc.to_plain_text }
+formatmap = {
+  text: ->(doc) { doc.to_plain_text },
+  yaml: ->(doc) { doc.to_yaml },
+  json: ->(doc) { doc.to_json }
+}
+format = formatmap[:text]
+opt.on("-T", "print to no format") {
+  format = formatmap[:text]
+}
 opt.on("-Y", "print to YAML format") {
   require "yaml"
-  format = ->(doc) { doc.to_yaml }
+  format = formatmap[:yaml]
 }
 opt.on("-J", "print to JSON format") {
   require "json"
-  format = ->(doc) { doc.to_json }
+  format = formatmap[:json]
 }
 
 opt.separator ""
@@ -144,17 +152,11 @@ def direxpand(path)
   path
 end
 
-def list(path, namespace: nil)
-  list = File.extattr_list!(path, namespace: namespace)
-  unless list.empty?
-    puts "#{path} \t#{list.join("\t")}"
-  end
-end
-
-def list_files(files, list_children, namespace)
-  files.each do |path|
+def list_files(files, list_children, namespace, &format)
+  result = files.each_with_object({}) do |path, a|
     begin
-      list path, namespace: namespace
+      ea = ExtAttr.list!(path, namespace)
+      a[path] = ea unless ea.empty?
     rescue SystemCallError
       $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
     else
@@ -162,9 +164,11 @@ def list_files(files, list_children, namespace)
         if File.directory?(path) && list_children
           Dir.children(path).sort.each do |e|
             begin
-              list File.join(path, e), namespace: namespace
+              entry = File.join(path, e)
+              ea = ExtAttr.list!(entry, namespace)
+              a[entry] = ea unless ea.empty?
             rescue SystemCallError
-              #$stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
+              $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
             end
           end
         end
@@ -173,6 +177,8 @@ def list_files(files, list_children, namespace)
       end
     end
   end
+
+  puts yield result
 end
 
 def get_to_print(list, extattr, namespace, value_only, ignore_error: false, &block)
@@ -218,15 +224,10 @@ end
 if ARGV.empty?
   case mode
   when :list
-    Dir.glob("*", File::FNM_DOTMATCH).sort.each do |path|
-      next if path =~ /(?:^|\/)\.+$/
-
-      begin
-        list path, namespace: namespace
-      rescue SystemCallError
-        $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n"
-      end
-    end
+    files = Dir.children(".")
+    files.sort!
+    files.prepend "."
+    list_files files, false, namespace, &format
   when :get
     list = Dir.children(".")
     list.sort!
@@ -238,7 +239,7 @@ if ARGV.empty?
 else
   case mode
   when :list
-    list_files(ARGV, list_children, namespace)
+    list_files(ARGV, list_children, namespace, &format)
   when :get
     get_to_print(ARGV, extattr, namespace, value_only, &format)
   when :set
