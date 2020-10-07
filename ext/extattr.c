@@ -42,7 +42,7 @@ static void extattr_init_implement(void);
 
 #define LOGF(FORMAT, ...) { fprintf(stderr, "%s:%d:%s: " FORMAT "\n", __FILE__, __LINE__, __func__, __VA_ARGS__); }
 
-static VALUE mExtAttr, mConstants;
+static VALUE mExtAttr;
 
 static ID id_downcase;
 static ID id_to_path;
@@ -480,11 +480,8 @@ Init_extattr(void)
     id_to_path = rb_intern("to_path");
 
     mExtAttr = rb_define_module("ExtAttr");
-    mConstants = rb_define_module_under(mExtAttr, "Constants");
-    rb_include_module(mExtAttr, mConstants);
-
-    rb_define_const(mConstants, "NAMESPACE_USER", ID2SYM(rb_intern("user")));
-    rb_define_const(mConstants, "NAMESPACE_SYSTEM", ID2SYM(rb_intern("system")));
+    rb_define_const(mExtAttr, "USER", ID2SYM(rb_intern("user")));
+    rb_define_const(mExtAttr, "SYSTEM", ID2SYM(rb_intern("system")));
 
     rb_define_singleton_method(mExtAttr, "list", RUBY_METHOD_FUNC(ext_s_list), 2);
     rb_define_singleton_method(mExtAttr, "list!", RUBY_METHOD_FUNC(ext_s_list_link), 2);

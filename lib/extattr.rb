@@ -16,8 +16,7 @@ end
 #
 # 拡張属性の名前空間を指定する場合、以下の値が利用できます:
 #
-# * ExtAttr::USER, ExtAttr::SYSTEM、
-#   File::EXTATTR_NAMESPACE_USER、File::EXTATTR_NAMESPACE_SYSTEM
+# * ExtAttr::USER, ExtAttr::SYSTEM
 # * 文字列又はシンボルで +user+、+system+ (大文字小文字を区別しません)
 #
 # これらの値は内部で変換、または処理が分岐されます。
@@ -35,9 +34,6 @@ end
 #
 module ExtAttr
   ExtAttr = self
-
-  USER = NAMESPACE_USER
-  SYSTEM = NAMESPACE_SYSTEM
 
   def self.open(path, namespace: USER)
     if path.kind_of?(File)
