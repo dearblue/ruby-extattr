@@ -9,6 +9,7 @@
   - `ExtAttr::USER`
   - `ExtAttr::SYSTEM`
   - `user` 又は `system` を文字列かシンボルで (大文字小文字は区別されない)
+  - `nil` (`ExtAttr::USER` と等価)
 
 規定値は `ExtAttr::USER` です。
 

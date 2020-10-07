@@ -178,7 +178,9 @@ convert_namespace_str(VALUE namespace)
 static int
 conv_namespace(VALUE namespace)
 {
-    if (rb_obj_is_kind_of(namespace, rb_cNumeric)) {
+    if (NIL_P(namespace)) {
+        return EXTATTR_NAMESPACE_USER;
+    } else if (rb_obj_is_kind_of(namespace, rb_cNumeric)) {
         return convert_namespace_int(namespace);
     } else if (rb_obj_is_kind_of(namespace, rb_cString) ||
                rb_obj_is_kind_of(namespace, rb_cSymbol)) {
