@@ -45,10 +45,10 @@ module ExtAttr
 
   #
   # call-seq:
-  #   each(path, namespace) -> Enumerator
-  #   each(path, namespace) { |name, data| ... } -> path
+  #   each(path, namespace = ExtAttr::USER) -> Enumerator
+  #   each(path, namespace = ExtAttr::USER) { |name, data| ... } -> path
   #
-  def self.each(path, namespace, &block)
+  def self.each(path, namespace = ExtAttr::USER, &block)
     return to_enum(:each, path, namespace) unless block
 
     list(path, namespace) { |name| yield(name, get(path, namespace, name)) }
@@ -58,10 +58,10 @@ module ExtAttr
 
   #
   # call-seq:
-  #   each!(path, namespace) -> Enumerator
-  #   each!(path, namespace) { |name, data| ... } -> path
+  #   each!(path, namespace = ExtAttr::USER) -> Enumerator
+  #   each!(path, namespace = ExtAttr::USER) { |name, data| ... } -> path
   #
-  def self.each!(path, namespace, &block)
+  def self.each!(path, namespace = ExtAttr::USER, &block)
     return to_enum(:each!, path, namespace) unless block
 
     list!(path, namespace) { |name| yield(name, get!(path, namespace, name)) }
