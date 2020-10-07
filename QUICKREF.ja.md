@@ -26,6 +26,23 @@
   - `ExtAttr.set!(path, namespace, name, value) -> nil`
   - `ExtAttr.delete(path, namespace, name) -> nil`
   - `ExtAttr.delete!(path, namespace, name) -> nil`
+  - `ExtAttr.open(path) -> a ExtAttr::Accessor instance`
+  - `ExtAttr.each(path, namespace) -> an ExtAttr::Accessor instance`
+  - `ExtAttr.each(path, namespace = ExtAttr::USER) -> an enumerator instance`
+  - `ExtAttr.each(path, namespace = ExtAttr::USER) { |name, data| ... } -> path`
+  - `ExtAttr.each!(path, namespace = ExtAttr::USER) -> an enumerator instance`
+  - `ExtAttr.each!(path, namespace = ExtAttr::USER) { |name, data| ... } -> path`
+
+
+## クラス `ExtAttr::Accessor`
+
+  - `ExtAttr::Accessor#each(namespace: ExtAttr::USER) -> an enumerator instance`
+  - `ExtAttr::Accessor#each(namespace: ExtAttr::USER) { |name, data| ... } -> path`
+  - `ExtAttr::Accessor#list(namespace: ExtAttr::USER) -> array`
+  - `ExtAttr::Accessor#size(name, namespace: ExtAttr::USER) -> integer`
+  - `ExtAttr::Accessor#get(name, namespace: ExtAttr::USER) -> string`
+  - `ExtAttr::Accessor#set(name, data, namespace: ExtAttr::USER) -> nil`
+  - `ExtAttr::Accessor#delete(name, namespace: ExtAttr::USER) -> nil`
 
 
 ## リファインメント `using ExtAttr`

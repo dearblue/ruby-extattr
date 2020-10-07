@@ -1,13 +1,18 @@
 
 # extattr-0.3
 
-  * ExtAttr モジュールを追加して実装をそちらに移動
-      * File クラスは ExtAttr::Extentions::File を include し、
-        〜〜::FileClass を extend するように変更しました。
-  * ExtAttr::Accessor クラスの追加
-      * 拡張属性の操作に特化したオブジェクトを扱えるようになりました。
-  * bin/extattr コマンドラインプログラムの追加
-  * mingw でライブラリを構築する時 C 実行時ライブラリを静的リンクするように変更
+extattr-0.2 との互換性はありません。
+
+  - `ExtAttr` モジュールを追加して実装をそちらに移動
+      - `File` クラスに対するメソッドの追加は、リファインメント機能によって拡張されます。
+        ```ruby
+        using ExtAttr
+        ```
+      - `File::EXTATTR_VERSION` 定数は冗長と判断し削除しました。
+  - `ExtAttr::Accessor` クラスの追加
+      - 拡張属性の操作に特化したオブジェクトを扱えるようになりました。
+  - `bin/extattr` コマンドラインプログラムの追加
+  - mingw でライブラリを構築する時 C 実行時ライブラリを静的リンクするように変更
 
 # extattr-0.2
 
