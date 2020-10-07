@@ -2,6 +2,7 @@ unless version = File.read("README.md").scan(/^\s*[\*\-]\s*version:{1,2}\s*(.+)/
   raise "バージョン情報が README.md に見つかりません"
 end
 
+DOC << "QUICKREF.ja.md"
 
 GEMSTUB = Gem::Specification.new do |s|
   s.name = "extattr"

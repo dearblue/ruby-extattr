@@ -2,15 +2,8 @@
 
 extattr is filesystem extended attributes manipurator for ruby on FreeBSD, GNU/Linux and Microsoft Windows.
 
-----
-
-  * [HISTORY](HISTORY.ja.md) (In Japanese)
-
-***END OF DOCUMENT IN ENGLISH***
-
-----
-
-***START OF DOCUMENT IN JAPANESE***
+  - [Quick Reference](QUICKREF.ja.md) (in Japanese)
+  - [HISTORY](HISTORY.ja.md) (in Japanese)
 
 extattr はファイルシステムの拡張属性を操作するライブラリで、FreeBSD、GNU/Linux、Windows に対応しています。
 
@@ -29,76 +22,6 @@ extattr はファイルシステムの拡張属性を操作するライブラリ
   * lubuntu 13.10 (i386)
   * Microsoft Windows XP Professional SP3
   * Microsoft Windows 7 Professional SP1
-
-
-## 簡易リファレンスマニュアル
-
-クラスメソッドに『!』がついているものはシンボリックリンクに対する操作となります。
-
-キーワード引数の ``namespace`` を与えると、拡張属性の名前空間を指定できます。
-
-与えられる値:
-
-  * ``ExtAttr::NAMESPACE_USER`` 又は ``File::EXTATTR_NAMESPACE_USER``
-  * ``ExtAttr::NAMESPACE_SYSTEM`` 又は ``File::EXTATTR_NAMESPACE_SYSTEM``
-  * ``user`` 又は ``system`` を文字列かシンボルで (大文字小文字は区別されない)
-
-規定値は ``ExtAttr::NAMESPACE_USER`` です。
-
-
-### 拡張属性の属性名を取得
-
-``` ruby:ruby
-File.extattr_list(path, namespace: File::EXTATTR_NAMESPACE_USER) -> array
-File.extattr_list(path, namespace: File::EXTATTR_NAMESPACE_USER) { |name| ... } -> nil
-File.extattr_list!(path, namespace: File::EXTATTR_NAMESPACE_USER) -> array
-File.extattr_list!(path, namespace: File::EXTATTR_NAMESPACE_USER) { |name| ... } -> nil
-File#extattr_list(namespace: File::EXTATTR_NAMESPACE_USER) -> array
-File#extattr_list(namespace: File::EXTATTR_NAMESPACE_USER) { |name| ... } -> nil
-```
-
-### 拡張属性の要素の大きさを取得
-
-``` ruby:ruby
-File.extattr_size(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> size
-File.extattr_size!(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> size
-File#extattr_size(name, namespace: File::EXTATTR_NAMESPACE_USER) -> size
-```
-
-### 拡張属性の要素を取得
-
-``` ruby:ruby
-File.extattr_get(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> data (String)
-File.extattr_get!(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> data (String)
-File#extattr_get(name, namespace: File::EXTATTR_NAMESPACE_USER) -> data (String)
-```
-
-### 拡張属性の要素を設定
-
-``` ruby:ruby
-File.extattr_set(path, name, data, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
-File.extattr_set!(path, name, data, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
-File#extattr_set(name, data, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
-```
-
-### 拡張属性の要素を削除
-
-``` ruby:ruby
-File.extattr_delete(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
-File.extattr_delete!(path, name, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
-File#extattr_delete(name, namespace: File::EXTATTR_NAMESPACE_USER) -> nil
-```
-
-### 拡張属性の属性名と要素を列挙する
-
-``` ruby:ruby
-File.extattr_each(path, namespace: File::EXTATTR_NAMESPACE_USER) -> Enumerator
-File.extattr_each(path, namespace: File::EXTATTR_NAMESPACE_USER) { |name, data| ... } -> nil
-File.extattr_each!(path, namespace: File::EXTATTR_NAMESPACE_USER) -> Enumerator
-File.extattr_each!(path, namespace: File::EXTATTR_NAMESPACE_USER) { |name, data| ... } -> nil
-File#extattr_each(namespace: File::EXTATTR_NAMESPACE_USER) -> Enumerator
-File#extattr_each(namespace: File::EXTATTR_NAMESPACE_USER) { |name, data| ... } -> file
-```
 
 
 ## GNU/Linux における特記事項
@@ -155,7 +78,7 @@ File#extattr_each(namespace: File::EXTATTR_NAMESPACE_USER) { |name, data| ... } 
   - package name: [extattr](https://rubygems.org/gems/extattr)
   - Author: dearblue
   - Version: 0.3
-  - Product quality: PROTOTYPE, UNSTABLE
+  - Product quality: technical preview
   - License: [2-clause BSD License](LICENSE.md)
   - Project page: <https://github.com/dearblue/ruby-extattr>
   - Support ruby: ruby-2.3+
