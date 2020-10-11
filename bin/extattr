@@ -213,9 +213,11 @@ end
 
 
 if mode == :print_version
+  ver = Gem.finish_resolve.find { |e| e.name == "extattr" }&.version&.to_s
+  ver ||= "unknown"
     puts <<-EOS
 #{File.basename $0}:
-  version: #{ExtAttr::VERSION}
+  version: extattr-#{ver}
   runtime ruby engine: #{RUBY_DESCRIPTION}
     EOS
     exit 0
