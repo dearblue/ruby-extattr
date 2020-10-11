@@ -46,10 +46,36 @@ module ExtAttr
   #
   # call-seq:
   #   each(path, namespace = ExtAttr::USER) -> Enumerator
-  #   each(path, namespace = ExtAttr::USER) { |name, data| ... } -> path
+  #   each(path, namespace = ExtAttr::USER) { |name| ... } -> path
   #
   def self.each(path, namespace = ExtAttr::USER, &block)
     return to_enum(:each, path, namespace) unless block
+
+    list(path, namespace, &block)
+
+    self
+  end
+
+  #
+  # call-seq:
+  #   each!(path, namespace = ExtAttr::USER) -> Enumerator
+  #   each!(path, namespace = ExtAttr::USER) { |name| ... } -> path
+  #
+  def self.each!(path, namespace = ExtAttr::USER, &block)
+    return to_enum(:each!, path, namespace) unless block
+
+    list!(path, namespace, &block)
+
+    self
+  end
+
+  #
+  # call-seq:
+  #   each_pair(path, namespace = ExtAttr::USER) -> Enumerator
+  #   each_pair(path, namespace = ExtAttr::USER) { |name, data| ... } -> path
+  #
+  def self.each_pair(path, namespace = ExtAttr::USER, &block)
+    return to_enum(:each_pair, path, namespace) unless block
 
     list(path, namespace) { |name| yield(name, get(path, namespace, name)) }
 
@@ -58,11 +84,11 @@ module ExtAttr
 
   #
   # call-seq:
-  #   each!(path, namespace = ExtAttr::USER) -> Enumerator
-  #   each!(path, namespace = ExtAttr::USER) { |name, data| ... } -> path
+  #   each_pair!(path, namespace = ExtAttr::USER) -> Enumerator
+  #   each_pair!(path, namespace = ExtAttr::USER) { |name, data| ... } -> path
   #
-  def self.each!(path, namespace = ExtAttr::USER, &block)
-    return to_enum(:each!, path, namespace) unless block
+  def self.each_pair!(path, namespace = ExtAttr::USER, &block)
+    return to_enum(:each_pair!, path, namespace) unless block
 
     list!(path, namespace) { |name| yield(name, get!(path, namespace, name)) }
 
@@ -91,6 +117,10 @@ module ExtAttr
 
     def each(namespace: ExtAttr::USER, &block)
       ExtAttr.each(obj, namespace, &block)
+    end
+
+    def each_pair(namespace: ExtAttr::USER, &block)
+      ExtAttr.each_pair(obj, namespace, &block)
     end
 
     def list(namespace: ExtAttr::USER, &block)
@@ -124,6 +154,13 @@ module ExtAttr
     #
     def extattr_each(namespace: ExtAttr::USER, &block)
       ExtAttr.each(self, namespace, &block)
+    end
+
+    #
+    # Enumeration file extattr.
+    #
+    def extattr_each_pair(namespace: ExtAttr::USER, &block)
+      ExtAttr.each_pair(self, namespace, &block)
     end
 
     #
@@ -177,6 +214,14 @@ module ExtAttr
 
     def extattr_each!(path, namespace: ExtAttr::USER, &block)
       ExtAttr.each!(path, namespace, &block)
+    end
+
+    def extattr_each_pair(path, namespace: ExtAttr::USER, &block)
+      ExtAttr.each_pair(path, namespace, &block)
+    end
+
+    def extattr_each_pair!(path, namespace: ExtAttr::USER, &block)
+      ExtAttr.each_pair!(path, namespace, &block)
     end
 
     def extattr_list(path, namespace: ExtAttr::USER, &block)
