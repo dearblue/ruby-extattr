@@ -71,9 +71,14 @@ module ExtAttr
 
   class Accessor < Struct.new(:obj, :path)
     BasicStruct = superclass
+    VIRT_ENOATTR = (ExtAttr::IMPLEMENT == "windows" ? Errno::ENOENT : Errno::ENOATTR)
 
     def [](name, namespace = ExtAttr::USER)
-      ExtAttr.get(obj, namespace, name)
+      begin
+        ExtAttr.get(obj, namespace, name)
+      rescue VIRT_ENOATTR
+        nil
+      end
     end
 
     def []=(name, namespace = ExtAttr::USER, data)
