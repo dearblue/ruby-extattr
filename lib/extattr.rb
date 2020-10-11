@@ -72,11 +72,11 @@ module ExtAttr
   class Accessor < Struct.new(:obj, :path)
     BasicStruct = superclass
 
-    def [](name)
+    def [](name, namespace = ExtAttr::USER)
       ExtAttr.get(obj, namespace, name)
     end
 
-    def []=(name, data)
+    def []=(name, namespace = ExtAttr::USER, data)
       if data.nil?
         ExtAttr.delete(obj, namespace, name)
       else
