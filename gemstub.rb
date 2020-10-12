@@ -18,4 +18,5 @@ Supported for FreeBSD (extattr), GNU/Linux (xattr) and Microsoft Windows (NTFS A
   s.email = "dearblue@users.osdn.me"
 
   s.add_development_dependency "rake", "~> 0"
+  s.add_development_dependency "test-unit", "~> 0"
 end
