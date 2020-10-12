@@ -186,6 +186,7 @@ def get_to_print(list, extattr, namespace, value_only, ignore_error: false, &blo
     begin
       v = File.extattr_get!(path, extattr, namespace: namespace)
       v.encode!("utf-8", "utf-8") rescue nil unless value_only
+      v.force_encoding(Encoding::BINARY) unless v.valid_encoding?
       a[path] = v
     rescue SystemCallError
       $stderr.puts "#{File.basename $0}: #$! (#{$!.class})\n" unless ignore_error
