@@ -476,6 +476,9 @@ ext_s_delete_link(VALUE mod, VALUE path, VALUE namespace, VALUE name)
 void
 Init_extattr(void)
 {
+#if HAVE_RB_EXT_RACTOR_SAFE
+    rb_ext_ractor_safe(true);
+#endif
     id_downcase = rb_intern("downcase");
     id_to_path = rb_intern("to_path");
 
