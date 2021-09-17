@@ -2,6 +2,8 @@
 
 require "mkmf"
 
+have_func("rb_ext_ractor_safe", "ruby.h")
+
 case
 when have_header("sys/extattr.h")
 

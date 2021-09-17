@@ -50,4 +50,26 @@ class ExtAttr::Test < Test::Unit::TestCase
     assert_nil(File.extattr_delete(FILEPATH2, "ext1"))
     assert_equal([], File.extattr_list(FILEPATH2))
   end
+
+  def test_ractor_extattr
+    # Skip this test on Ruby < 3.0
+    return true unless defined?(Ractor)
+
+    # Ractor is still experimental in Ruby 3.0.x — suppress warning for this test.
+    old_warning_status = Warning[:experimental]
+    Warning[:experimental] = false
+
+    extdata = "abcdefg"
+    File.open(FILEPATH2, "ab") {}
+
+    assert_equal([], File.extattr_list(FILEPATH2))
+    assert_nil(File.extattr_set(FILEPATH2, "ext1", extdata))
+
+    assert_equal(["ext1"], Ractor.new(FILEPATH2) { |path| File.extattr_list(path) }.take)
+    assert_equal(extdata, Ractor.new(FILEPATH2) { |path| File.extattr_get(path, "ext1") }.take)
+
+    assert_nil(File.extattr_delete(FILEPATH2, "ext1"))
+    assert_equal([], File.extattr_list(FILEPATH2))
+    Warning[:experimental] = old_warning_status
+  end
 end

@@ -77,7 +77,7 @@ extattr はファイルシステムの拡張属性を操作するライブラリ
 
   - package name: [extattr](https://rubygems.org/gems/extattr)
   - Author: dearblue
-  - Version: 0.3
+  - Version: 0.4
   - Product quality: technical preview
   - License: [2-clause BSD License](LICENSE.md)
   - Project page: <https://github.com/dearblue/ruby-extattr>
