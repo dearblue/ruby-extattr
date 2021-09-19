@@ -204,8 +204,8 @@ module ExtAttr
   end
 
   refine File.singleton_class do
-    def extattr(path, namespace: ExtAttr::USER)
-      ExtAttr.open(path, namespace: namespace)
+    def extattr(path)
+      ExtAttr.open(path)
     end
 
     def extattr_each(path, namespace: ExtAttr::USER, &block)
