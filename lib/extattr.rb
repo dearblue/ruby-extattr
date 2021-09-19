@@ -37,9 +37,16 @@ module ExtAttr
 
   def self.open(path)
     if path.kind_of?(File)
-      ExtAttr::Accessor[path, path.to_path]
+      ea = ExtAttr::Accessor[path, path.to_path]
+      block_given? ? yield(ea) : ea
     else
-      ExtAttr::Accessor[::File.open(path), path]
+      if block_given?
+        ::File.open(path) do |file|
+          return yield(ExtAttr::Accessor[file, path])
+        end
+      else
+        ExtAttr::Accessor[::File.open(path), path]
+      end
     end
   end
 
