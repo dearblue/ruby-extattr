@@ -9,7 +9,7 @@ GEMSTUB = Gem::Specification.new do |s|
   s.version = version
   s.summary = "extended file attribute manipurator"
   s.description = <<-EOS
-"extattr" is extended file attribute manipurator for ruby.
+"extattr" is extended file attribute manipurator for Ruby.
 Supported for FreeBSD (extattr), GNU/Linux (xattr) and Microsoft Windows (NTFS Alternative Data Stream (ADS) + NTFS Extended Attributes (EA)).
   EOS
   s.homepage = "https://github.com/dearblue/ruby-extattr"

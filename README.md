@@ -1,6 +1,6 @@
-# extattr - filesystem extended attributes manipurator for ruby
+# extattr - filesystem extended attributes manipurator for Ruby
 
-extattr is filesystem extended attributes manipurator for ruby on FreeBSD, GNU/Linux and Microsoft Windows.
+extattr is filesystem extended attributes manipurator for Ruby on FreeBSD, GNU/Linux and Microsoft Windows.
 
   - [Quick Reference](QUICKREF.ja.md) (in Japanese)
   - [HISTORY](HISTORY.ja.md) (in Japanese)
@@ -40,7 +40,7 @@ extattr はファイルシステムの拡張属性を操作するライブラリ
     これは『拡張属性』と捉えた場合、巨大なデータを扱えるべきではないという考えによるためです
     (本当のところは FreeBSD の拡張属性が最大 64KiB 弱であることが由来です)。
   * 巨大な NTFS ADS を扱いたい場合は、``File.open`` でファイルとして扱えるので自由に読み書きできます。<br>
-    これは ruby に限ったことではなく、Windows による仕様です。<br>
+    これは Ruby に限ったことではなく、Windows による仕様です。<br>
     この場合の与えるファイル名は、``path + ":" + name`` という形になります。
 
     ``` ruby:ruby
@@ -81,4 +81,4 @@ extattr はファイルシステムの拡張属性を操作するライブラリ
   - Product quality: technical preview
   - License: [2-clause BSD License](LICENSE.md)
   - Project page: <https://github.com/dearblue/ruby-extattr>
-  - Support ruby: ruby-2.3+
+  - Support Ruby: Ruby 2.3+

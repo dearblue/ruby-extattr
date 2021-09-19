@@ -91,7 +91,7 @@ wpath2str(const wchar_t path[], size_t size)
 }
 
 /*
- * ADS 名の先端のコロン『:』と、終端の『:$DATA』を除去して ruby の文字列を返す。
+ * ADS 名の先端のコロン『:』と、終端の『:$DATA』を除去して Ruby の文字列を返す。
  */
 static VALUE
 adsname2str(const wchar_t name[], size_t size)
