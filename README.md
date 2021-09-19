@@ -81,4 +81,4 @@ extattr はファイルシステムの拡張属性を操作するライブラリ
   - Product quality: technical preview
   - License: [2-clause BSD License](LICENSE.md)
   - Project page: <https://github.com/dearblue/ruby-extattr>
-  - Support Ruby: Ruby 2.3+
+  - Support Ruby: Ruby 2.5+

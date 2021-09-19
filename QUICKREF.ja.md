@@ -27,6 +27,7 @@
   - `ExtAttr.delete(path, namespace, name) -> nil`
   - `ExtAttr.delete!(path, namespace, name) -> nil`
   - `ExtAttr.open(path) -> a ExtAttr::Accessor instance`
+  - `ExtAttr.open(path) { |ea| ... } -> returned value from yield block`
   - `ExtAttr.each(path, namespace) -> an ExtAttr::Accessor instance`
   - `ExtAttr.each(path, namespace = ExtAttr::USER) -> an enumerator instance`
   - `ExtAttr.each(path, namespace = ExtAttr::USER) { |name, data| ... } -> path`
@@ -48,6 +49,13 @@
 ## リファインメント `using ExtAttr`
 
 リファインメント機能を使うことにより、`File` が拡張されます。
+
+### 拡張属性オブジェクトを生成する
+
+```ruby:ruby
+File.extattr(path) -> an ExtAttr::Accessor instance
+File#extattr -> an ExtAttr::Accessor instance
+```
 
 ### 拡張属性の属性名を取得
 

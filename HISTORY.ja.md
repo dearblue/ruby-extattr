@@ -1,3 +1,11 @@
+# extattr-0.4
+
+  - Ruby 3 の `Ractor` への対応 (thanks @okeeblow, https://github.com/dearblue/ruby-extattr/pull/1)
+  - `bin/extattr` コマンドラインプログラムを削除
+
+    まだ小さな不具合があり、調整が必要です。
+    独立した gem `extattr-cli` として提供することを計画しています。
+
 
 # extattr-0.3
 
