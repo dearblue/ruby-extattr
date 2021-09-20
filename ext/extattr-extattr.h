@@ -76,7 +76,7 @@ file_s_extattr_list_link_main(VALUE path, int namespace1)
 static VALUE
 extattr_size_common(ssize_t (*extattr_get)(), intptr_t d, int namespace1, VALUE name)
 {
-    ssize_t size = extattr_get(d, namespace1, RSTRING_PTR(name), NULL, 0);
+    ssize_t size = extattr_get(d, namespace1, StringValueCStr(name), NULL, 0);
     if (size < 0) { rb_sys_fail("extattr_get call error"); }
     return SIZET2NUM(size);
 }
@@ -103,10 +103,10 @@ file_s_extattr_size_link_main(VALUE path, int namespace1, VALUE name)
 static VALUE
 extattr_get_common(ssize_t (*extattr_get)(), intptr_t d, VALUE path, int namespace1, VALUE name)
 {
-    ssize_t size = extattr_get(d, namespace1, RSTRING_PTR(name), NULL, 0);
+    ssize_t size = extattr_get(d, namespace1, StringValueCStr(name), NULL, 0);
     if (size < 0) { rb_sys_fail(StringValueCStr(path)); }
     VALUE buf = rb_str_buf_new(size);
-    size = extattr_get(d, namespace1, RSTRING_PTR(name), RSTRING_PTR(buf), size);
+    size = extattr_get(d, namespace1, StringValueCStr(name), StringValueCStr(buf), size);
     if (size < 0) { rb_sys_fail(StringValueCStr(path)); }
     rb_str_set_len(buf, size);
     return buf;
@@ -134,7 +134,7 @@ file_s_extattr_get_link_main(VALUE path, int namespace1, VALUE name)
 static VALUE
 extattr_set_common(ssize_t (*extattr_set)(), intptr_t d, int namespace1, VALUE name, VALUE data)
 {
-    int status = extattr_set(d, namespace1, RSTRING_PTR(name), RSTRING_PTR(data), RSTRING_LEN(data));
+    int status = extattr_set(d, namespace1, StringValueCStr(name), StringValueCStr(data), RSTRING_LEN(data));
     if (status < 0) { rb_sys_fail("extattr_set call error"); }
     return Qnil;
 }
@@ -161,7 +161,7 @@ file_s_extattr_set_link_main(VALUE path, int namespace1, VALUE name, VALUE data)
 static VALUE
 extattr_delete_common(int (*extattr_delete)(), intptr_t d, int namespace1, VALUE name)
 {
-    int status = extattr_delete(d, namespace1, RSTRING_PTR(name), NULL, 0);
+    int status = extattr_delete(d, namespace1, StringValueCStr(name), NULL, 0);
     if (status < 0) { rb_sys_fail("extattr_delete call error"); }
     return Qnil;
 }
