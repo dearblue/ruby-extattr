@@ -63,8 +63,8 @@ hash_lookup(VALUE hash, VALUE key, VALUE default_value)
 static inline int
 file2fd(VALUE file)
 {
+    rb_check_type(file, RUBY_T_FILE);
     rb_io_t *fptr;
-    // FIXME: ファイルであることを確認すべき
     GetOpenFile(file, fptr);
     return fptr->fd;
 }
