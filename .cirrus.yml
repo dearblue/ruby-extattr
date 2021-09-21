@@ -1,0 +1,12 @@
+freebsd_instance:
+  image: freebsd-13-0-release-amd64
+  cpu: 2
+  memory: 2G
+task:
+  install_script: pkg install -y ruby rubygem-rake rubygem-test-unit
+  script: |-
+    rake RUBYSET=ruby sofiles || exit 1
+    for test in test/test_*.rb
+    do
+      ruby -I lib $test || exit 1
+    done
