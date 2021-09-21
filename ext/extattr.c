@@ -11,6 +11,7 @@
 #include <ruby/io.h>
 #include <ruby/intern.h>
 #include <ruby/version.h>
+#include <ctype.h>
 
 
 static VALUE file_extattr_list_main(VALUE file, int fd, int namespace1);
@@ -115,6 +116,39 @@ aux_sys_fail(VALUE filesrc, const char *funcname)
     rb_sys_fail(StringValueCStr(tmp));
 }
 
+static size_t
+aux_str_getmem(VALUE obj, const char **pp)
+{
+    switch (rb_type(obj)) {
+    case RUBY_T_STRING:
+        break;
+    case RUBY_T_SYMBOL:
+        obj = rb_id2str(rb_sym2id(obj));
+        break;
+    default:
+        rb_raise(rb_eTypeError, "expect string or symbol for namespace");
+    }
+
+    size_t len;
+    RSTRING_GETMEM(obj, *pp, len);
+    return len;
+}
+
+static int
+aux_memcasecmp(const char *a, const char *b, size_t n)
+{
+    // MEMO: memicmp() があればそちらを使うべき？
+
+    for (; n > 0; n--, a++, b++) {
+        int c = tolower(*(const unsigned char *)a) - tolower(*(const unsigned char *)b);
+        if (c) {
+            return (c > 0) ? 1 : -1;
+        }
+    }
+
+    return 0;
+}
+
 
 #if defined(HAVE_SYS_EXTATTR_H)
 #   include "extattr-extattr.h"
@@ -158,15 +192,12 @@ convert_namespace_str(VALUE namespace)
     static const char ns_system[] = "system";
     static const int ns_system_len = sizeof(ns_system) / sizeof(ns_system[0]) - 1;
 
-    VALUE namespace1 = rb_funcall2(namespace, id_downcase, 0, 0);
-    rb_check_type(namespace1, RUBY_T_STRING);
     const char *p;
-    int len;
-    RSTRING_GETMEM(namespace1, p, len);
+    size_t len = aux_str_getmem(namespace, &p);
 
-    if (len == ns_user_len && memcmp(p, ns_user, ns_user_len) == 0) {
+    if (len == ns_user_len && aux_memcasecmp(p, ns_user, ns_user_len) == 0) {
         return EXTATTR_NAMESPACE_USER;
-    } else if (len == ns_system_len && memcmp(p, ns_system, ns_system_len) == 0) {
+    } else if (len == ns_system_len && aux_memcasecmp(p, ns_system, ns_system_len) == 0) {
         return EXTATTR_NAMESPACE_SYSTEM;
     } else {
         rb_raise(rb_eArgError,
